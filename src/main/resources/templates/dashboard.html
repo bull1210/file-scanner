@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title th:text="'Dashboard — Scan #' + ${scan.id}">Dashboard</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+    <style>
+        body { background: #f0f2f5; }
+        .stat-card { border: none; border-radius: 16px; }
+        canvas { max-height: 280px; }
+        .chart-drillable { cursor: pointer; }
+        .drillable-hint { font-size: 0.7rem; color: #9ca3af; }
+    </style>
+</head>
+<body class="d-flex flex-column min-vh-100">
+
+<!-- Navbar -->
+<nav class="navbar navbar-dark shadow-sm" style="background:linear-gradient(135deg,#1a1a2e 0%,#0f3460 100%)">
+    <div class="container-fluid px-4">
+        <a class="navbar-brand fw-bold d-flex align-items-center" href="/">
+            <svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg" class="me-2">
+                <rect width="28" height="28" rx="6" fill="#e94560"/>
+                <path d="M5 8h18M5 13h12M5 18h14M5 23h9" stroke="white" stroke-width="2" stroke-linecap="round"/>
+                <circle cx="21" cy="20" r="5" fill="#f59e0b"/>
+                <path d="M19 20h4M21 18v4" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+            FileScanner
+        </a>
+        <div class="d-flex gap-2">
+            <a href="/" class="btn btn-sm btn-outline-light"><i class="bi bi-house-fill me-1"></i>Home</a>
+            <a th:href="@{/browse/{id}(id=${scan.id})}" class="btn btn-sm btn-outline-light">
+                <i class="bi bi-folder2-open me-1"></i>Browse
+            </a>
+            <a th:href="@{/audit(path=${scan.rootPath})}" class="btn btn-sm btn-outline-light">
+                <i class="bi bi-shield-check me-1"></i>Audit
+            </a>
+            <a href="/query" class="btn btn-sm btn-warning fw-semibold">
+                <i class="bi bi-stars me-1"></i>AI Query
+            </a>
+        </div>
+    </div>
+</nav>
+
+<div class="container-fluid px-4 py-4 flex-grow-1">
+
+    <!-- Breadcrumb -->
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="/">Home</a></li>
+            <li class="breadcrumb-item active">Dashboard #<span th:text="${scan.id}"></span></li>
+        </ol>
+    </nav>
+
+    <div class="d-flex align-items-center justify-content-between mb-4">
+        <div>
+            <h2 class="fw-bold mb-0"><i class="bi bi-bar-chart-fill me-2 text-primary"></i>Scan Dashboard</h2>
+            <p class="text-muted mb-0" th:text="${scan.rootPath}"></p>
+        </div>
+    </div>
+
+    <!-- Summary cards -->
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-md-3">
+            <div class="card stat-card shadow-sm text-white" style="background:linear-gradient(135deg,#667eea,#764ba2)">
+                <div class="card-body">
+                    <div class="small opacity-75">Total Files</div>
+                    <h3 class="fw-bold mb-0" th:text="${#numbers.formatInteger(stats.totalFileCount,1,'COMMA')}">0</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card stat-card shadow-sm text-white" style="background:linear-gradient(135deg,#11998e,#38ef7d)">
+                <div class="card-body">
+                    <div class="small opacity-75">Total Size</div>
+                    <h3 class="fw-bold mb-0" th:text="${stats.formattedTotalSize}">0 B</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card stat-card shadow-sm text-white" style="background:linear-gradient(135deg,#f093fb,#f5576c)">
+                <div class="card-body">
+                    <div class="small opacity-75">File Types</div>
+                    <h3 class="fw-bold mb-0" th:text="${stats.extLabels.size()}">0</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card stat-card shadow-sm text-white" style="background:linear-gradient(135deg,#4facfe,#00f2fe)">
+                <div class="card-body">
+                    <div class="small opacity-75">Scan ID</div>
+                    <h3 class="fw-bold mb-0" th:text="'#' + ${scan.id}"></h3>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts row 1 -->
+    <div class="row g-3 mb-3">
+        <div class="col-md-5">
+            <div class="card shadow-sm rounded-4 h-100">
+                <div class="card-header bg-white border-0 fw-semibold pt-3 d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-pie-chart-fill me-2 text-warning"></i>Files by Extension (top 15)</span>
+                    <span class="drillable-hint"><i class="bi bi-cursor-fill me-1"></i>Click slice to browse</span>
+                </div>
+                <div class="card-body d-flex align-items-center justify-content-center">
+                    <canvas id="extPieChart" class="chart-drillable"></canvas>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-7">
+            <div class="card shadow-sm rounded-4 h-100">
+                <div class="card-header bg-white border-0 fw-semibold pt-3 d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-file-earmark-bar-graph-fill me-2 text-primary"></i>Top 20 Largest Files</span>
+                    <span class="drillable-hint"><i class="bi bi-cursor-fill me-1"></i>Click bar to open folder</span>
+                </div>
+                <div class="card-body">
+                    <canvas id="largeFilesChart" class="chart-drillable"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts row 2 -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-6">
+            <div class="card shadow-sm rounded-4 h-100">
+                <div class="card-header bg-white border-0 fw-semibold pt-3">
+                    <i class="bi bi-clock-history me-2 text-danger"></i>Files by Age
+                </div>
+                <div class="card-body">
+                    <canvas id="ageChart"></canvas>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card shadow-sm rounded-4 h-100">
+                <div class="card-header bg-white border-0 fw-semibold pt-3">
+                    <i class="bi bi-diagram-3-fill me-2 text-success"></i>Entries by Directory Depth
+                </div>
+                <div class="card-body">
+                    <canvas id="depthChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Largest files table -->
+    <div class="card shadow-sm rounded-4 mb-4">
+        <div class="card-header bg-white border-0 fw-semibold pt-3">
+            <i class="bi bi-sort-down me-2 text-secondary"></i>Top 20 Largest Files
+            <span class="drillable-hint ms-2"><i class="bi bi-cursor-fill me-1"></i>Click name to open folder</span>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-sm table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr><th>#</th><th>Name</th><th>Extension</th><th>Size</th><th>Last Modified</th></tr>
+                    </thead>
+                    <tbody>
+                    <tr th:each="f,iter : ${stats.largestFiles}">
+                        <td class="text-muted" th:text="${iter.index + 1}"></td>
+                        <td th:title="${f.fullPath}">
+                            <a th:href="@{/browse/{id}(id=${scan.id},path=${f.parentPath})}"
+                               class="text-decoration-none fw-semibold"
+                               th:text="${f.name}"></a>
+                        </td>
+                        <td><span class="badge bg-light text-dark border" th:text="${f.extension ?: '—'}"></span></td>
+                        <td class="fw-semibold" th:text="${T(com.filescanner.dto.StatsDto).formatBytes(f.sizeBytes)}"></td>
+                        <td class="text-muted small" th:text="${#temporals.format(f.lastModified,'yyyy-MM-dd HH:mm')}"></td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<!-- Footer -->
+<footer class="bg-dark text-center py-3 mt-auto">
+    <span class="text-white-50 small">
+        <svg width="13" height="13" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg" class="me-1 mb-1">
+            <rect width="28" height="28" rx="6" fill="#e94560"/>
+            <path d="M5 8h18M5 13h12M5 18h14M5 23h9" stroke="white" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+        FileScanner &copy; 2026 &mdash; Powered by Spring Boot &amp; Claude AI
+    </span>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script th:inline="javascript">
+/*<![CDATA[*/
+const scanId     = /*[[${scan.id}]]*/ 0;
+const extLabels  = /*[[${stats.extLabels}]]*/  [];
+const extCounts  = /*[[${stats.extCounts}]]*/  [];
+const largeNames = /*[[${stats.largestFiles.![name]}]]*/ [];
+const largeSizes = /*[[${stats.largestFiles.![sizeBytes]}]]*/ [];
+const largePaths = /*[[${stats.largestFiles.![parentPath]}]]*/ [];
+const ageCounts  = /*[[${stats.ageBuckets}]]*/ [0,0,0,0,0];
+const depthLevels = /*[[${stats.depthLevels}]]*/ [];
+const depthCounts = /*[[${stats.depthCounts}]]*/ [];
+
+const PALETTE = [
+    '#6366f1','#f59e0b','#10b981','#ef4444','#3b82f6',
+    '#8b5cf6','#ec4899','#14b8a6','#f97316','#84cc16',
+    '#06b6d4','#a855f7','#e11d48','#0ea5e9','#22c55e'
+];
+
+// Extension doughnut — drillable: click slice → browse by extension
+new Chart(document.getElementById('extPieChart'), {
+    type: 'doughnut',
+    data: {
+        labels: extLabels.slice(0, 15),
+        datasets: [{
+            data: extCounts.slice(0, 15),
+            backgroundColor: PALETTE,
+            borderWidth: 2,
+            borderColor: '#fff'
+        }]
+    },
+    options: {
+        onClick(evt, elements) {
+            if (!elements.length) return;
+            const ext = extLabels[elements[0].index];
+            if (ext && ext !== '(none)') {
+                window.location.href = '/browse/' + scanId + '?search=.' + encodeURIComponent(ext);
+            }
+        },
+        onHover(evt, elements) {
+            evt.native.target.style.cursor = elements.length ? 'pointer' : 'default';
+        },
+        plugins: { legend: { position: 'right', labels: { boxWidth: 12, padding: 10, font: { size: 11 } } } },
+        cutout: '60%'
+    }
+});
+
+// Largest files horizontal bar — drillable: click bar → open parent folder
+new Chart(document.getElementById('largeFilesChart'), {
+    type: 'bar',
+    data: {
+        labels: largeNames,
+        datasets: [{
+            label: 'Size',
+            data: largeSizes,
+            backgroundColor: 'rgba(99,102,241,0.75)',
+            borderRadius: 4
+        }]
+    },
+    options: {
+        indexAxis: 'y',
+        onClick(evt, elements) {
+            if (!elements.length) return;
+            const parentPath = largePaths[elements[0].index];
+            if (parentPath) {
+                window.location.href = '/browse/' + scanId + '?path=' + encodeURIComponent(parentPath);
+            }
+        },
+        onHover(evt, elements) {
+            evt.native.target.style.cursor = elements.length ? 'pointer' : 'default';
+        },
+        plugins: { legend: { display: false } },
+        scales: {
+            x: { ticks: { callback: v => formatBytes(v) }, grid: { color: '#f3f4f6' } },
+            y: { ticks: { font: { size: 10 } } }
+        }
+    }
+});
+
+// Age bar chart
+new Chart(document.getElementById('ageChart'), {
+    type: 'bar',
+    data: {
+        labels: ['< 1 day', '1–7 days', '7–30 days', '30d–1 year', '> 1 year'],
+        datasets: [{
+            label: 'Files',
+            data: ageCounts,
+            backgroundColor: ['#10b981','#3b82f6','#f59e0b','#ef4444','#6b7280'],
+            borderRadius: 6
+        }]
+    },
+    options: {
+        plugins: { legend: { display: false } },
+        scales: { y: { beginAtZero: true, grid: { color: '#f3f4f6' } } }
+    }
+});
+
+// Depth bar chart
+new Chart(document.getElementById('depthChart'), {
+    type: 'bar',
+    data: {
+        labels: depthLevels.map(d => 'Level ' + d),
+        datasets: [{
+            label: 'Entries',
+            data: depthCounts,
+            backgroundColor: 'rgba(16,185,129,0.75)',
+            borderRadius: 6
+        }]
+    },
+    options: {
+        plugins: { legend: { display: false } },
+        scales: { y: { beginAtZero: true, grid: { color: '#f3f4f6' } } }
+    }
+});
+
+function formatBytes(b) {
+    if (b == null || b < 1024) return (b || 0) + ' B';
+    const units = ['KB','MB','GB','TB'];
+    let i = -1;
+    do { b /= 1024; i++; } while (b >= 1024 && i < units.length - 1);
+    return b.toFixed(1) + ' ' + units[i];
+}
+/*]]>*/
+</script>
+</body>
+</html>

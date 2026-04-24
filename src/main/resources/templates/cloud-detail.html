@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title th:text="${account.displayName} + ' — File Scanner'">Account — File Scanner</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+    <style>
+        body { background:#f0f2f5; }
+        .stat-card { border:none; border-radius:16px; }
+        .status-CONNECTED { color:#10b981; }
+        .status-SYNCING   { color:#3b82f6; }
+        .status-SYNCED    { color:#10b981; }
+        .status-ERROR     { color:#ef4444; }
+        .status-PENDING   { color:#f59e0b; }
+        .ext-bar { height:8px; border-radius:4px; background:#0d6efd; }
+    </style>
+</head>
+<body class="d-flex flex-column min-vh-100">
+
+<nav class="navbar navbar-dark shadow-sm" style="background:linear-gradient(135deg,#1a1a2e 0%,#0f3460 100%)">
+    <div class="container-fluid px-4">
+        <a class="navbar-brand fw-bold d-flex align-items-center" href="/">
+            <svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg" class="me-2">
+                <rect width="28" height="28" rx="6" fill="#e94560"/>
+                <path d="M5 8h18M5 13h12M5 18h14M5 23h9" stroke="white" stroke-width="2" stroke-linecap="round"/>
+                <circle cx="21" cy="20" r="5" fill="#f59e0b"/>
+                <path d="M19 20h4M21 18v4" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+            FileScanner
+        </a>
+        <div class="d-flex gap-2">
+            <a href="/" class="btn btn-sm btn-outline-light"><i class="bi bi-house-fill me-1"></i>Home</a>
+            <a href="/cloud" class="btn btn-sm btn-outline-light"><i class="bi bi-cloud-fill me-1"></i>Cloud</a>
+            <a href="/audit" class="btn btn-sm btn-outline-light"><i class="bi bi-shield-check me-1"></i>Audit</a>
+            <a href="/query" class="btn btn-sm btn-warning fw-semibold"><i class="bi bi-stars me-1"></i>AI Query</a>
+        </div>
+    </div>
+</nav>
+
+<div class="container-fluid px-4 py-4 flex-grow-1">
+
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="/">Home</a></li>
+            <li class="breadcrumb-item"><a href="/cloud">Cloud Storage</a></li>
+            <li class="breadcrumb-item active" th:text="${account.displayName}"></li>
+        </ol>
+    </nav>
+
+    <!-- Header -->
+    <div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-3">
+        <div>
+            <div class="d-flex align-items-center gap-2 mb-1">
+                <i th:if="${account.provider == 'ONEDRIVE'}"    class="bi bi-microsoft fs-4 text-primary"></i>
+                <i th:if="${account.provider == 'GOOGLEDRIVE'}" class="bi bi-google fs-4 text-danger"></i>
+                <h2 class="fw-bold mb-0" th:text="${account.displayName}"></h2>
+                <span class="fw-semibold" th:classappend="'status-' + ${account.status}">
+                    <i class="bi bi-circle-fill me-1" style="font-size:.5rem"></i>
+                    <span th:text="${account.status}"></span>
+                </span>
+            </div>
+            <p class="text-muted mb-0 small" th:text="${account.userEmail ?: 'Not yet connected'}"></p>
+        </div>
+        <div class="d-flex gap-2 flex-wrap">
+            <!-- Connect / Re-auth -->
+            <a th:href="@{/cloud/connect/{id}(id=${account.id})}"
+               th:text="${account.status == 'PENDING' ? 'Connect' : 'Re-auth'}"
+               th:class="${account.status == 'PENDING' ? 'btn btn-primary fw-semibold' : 'btn btn-outline-secondary'}">
+                <i class="bi bi-link-45deg me-1"></i>
+            </a>
+            <!-- Sync -->
+            <form th:unless="${account.status == 'PENDING' or syncing}"
+                  th:action="@{/cloud/{id}/sync(id=${account.id})}" method="post" class="d-inline">
+                <button class="btn btn-success fw-semibold">
+                    <i class="bi bi-cloud-download me-1"></i>Sync Now
+                </button>
+            </form>
+            <!-- Browse -->
+            <a th:if="${account.status == 'SYNCED'}"
+               th:href="@{/cloud/{id}/browse(id=${account.id})}"
+               class="btn btn-outline-primary fw-semibold">
+                <i class="bi bi-folder2-open me-1"></i>Browse Files
+            </a>
+        </div>
+    </div>
+
+    <!-- Sync progress (live) -->
+    <div th:if="${syncing}" class="card shadow-sm mb-4" style="border:none;border-radius:16px" id="sync-progress-card">
+        <div class="card-body p-4">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <span class="fw-semibold text-primary"><i class="bi bi-arrow-repeat me-1"></i>Syncing…</span>
+                <span class="text-muted small" id="prog-msg">Starting…</span>
+            </div>
+            <div class="progress" style="height:8px">
+                <div class="progress-bar progress-bar-striped progress-bar-animated bg-primary" style="width:100%"></div>
+            </div>
+            <div class="text-muted small mt-2" id="prog-count"></div>
+        </div>
+    </div>
+
+    <!-- Error alert -->
+    <div th:if="${account.status == 'ERROR'}" class="alert alert-danger rounded-3 mb-4">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i>
+        <strong>Sync error:</strong> <span th:text="${account.errorMessage}"></span>
+    </div>
+
+    <!-- Stats cards -->
+    <div th:if="${account.status == 'SYNCED'}" class="row g-3 mb-4">
+        <div class="col-6 col-md-3">
+            <div class="card stat-card shadow-sm h-100 text-center p-3">
+                <div class="text-muted small mb-1"><i class="bi bi-file-earmark me-1"></i>Files</div>
+                <div class="fw-bold fs-4" th:text="${#numbers.formatInteger(account.totalFiles ?: 0, 1, 'COMMA')}"></div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card stat-card shadow-sm h-100 text-center p-3">
+                <div class="text-muted small mb-1"><i class="bi bi-folder me-1"></i>Folders</div>
+                <div class="fw-bold fs-4" th:text="${#numbers.formatInteger(account.totalFolders ?: 0, 1, 'COMMA')}"></div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card stat-card shadow-sm h-100 text-center p-3">
+                <div class="text-muted small mb-1"><i class="bi bi-hdd me-1"></i>Total Size</div>
+                <div class="fw-bold fs-4"
+                     th:text="${account.totalSizeBytes != null ? T(com.filescanner.dto.StatsDto).formatBytes(account.totalSizeBytes) : '—'}"></div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card stat-card shadow-sm h-100 text-center p-3">
+                <div class="text-muted small mb-1"><i class="bi bi-clock me-1"></i>Last Sync</div>
+                <div class="fw-bold small"
+                     th:text="${account.lastSyncAt != null ? #temporals.format(account.lastSyncAt,'yyyy-MM-dd HH:mm') : '—'}"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts + tables row -->
+    <div th:if="${account.status == 'SYNCED'}" class="row g-4">
+
+        <!-- Largest files -->
+        <div class="col-lg-7">
+            <div class="card shadow-sm h-100" style="border:none;border-radius:16px">
+                <div class="card-body p-4">
+                    <h6 class="fw-bold mb-3"><i class="bi bi-bar-chart-fill me-2 text-warning"></i>Largest Files</h6>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Path</th>
+                                    <th class="text-end">Size</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr th:each="f : ${largest}">
+                                    <td class="text-truncate" style="max-width:180px" th:title="${f.name}">
+                                        <i class="bi bi-file-earmark me-1 text-muted"></i>
+                                        <span th:text="${f.name}"></span>
+                                    </td>
+                                    <td class="text-truncate text-muted small" style="max-width:200px" th:title="${f.parentPath}">
+                                        <span th:text="${f.parentPath}"></span>
+                                    </td>
+                                    <td class="text-end text-nowrap small fw-semibold"
+                                        th:text="${T(com.filescanner.dto.StatsDto).formatBytes(f.sizeBytes ?: 0)}"></td>
+                                    <td>
+                                        <a th:if="${f.webUrl != null}"
+                                           th:href="${f.webUrl}" target="_blank"
+                                           class="btn btn-sm btn-outline-secondary py-0 px-1">
+                                            <i class="bi bi-box-arrow-up-right" style="font-size:.7rem"></i>
+                                        </a>
+                                    </td>
+                                </tr>
+                                <tr th:if="${#lists.isEmpty(largest)}">
+                                    <td colspan="4" class="text-muted text-center py-3">No files found</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Extension breakdown -->
+        <div class="col-lg-5">
+            <div class="card shadow-sm h-100" style="border:none;border-radius:16px">
+                <div class="card-body p-4">
+                    <h6 class="fw-bold mb-3"><i class="bi bi-pie-chart-fill me-2 text-primary"></i>By Extension</h6>
+                    <canvas id="extChart" height="200"></canvas>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Setup prompt if not yet synced -->
+    <div th:unless="${account.status == 'SYNCED'}" class="text-center py-5">
+        <i class="bi bi-cloud-arrow-down display-1 text-muted d-block mb-3"></i>
+        <h5 class="text-muted">No data yet</h5>
+        <p class="text-muted mb-4"
+           th:text="${account.status == 'PENDING' ? 'Connect your account first, then sync to fetch files.' :
+                      account.status == 'CONNECTED' ? 'Account connected! Click Sync Now to fetch all files.' :
+                      account.status == 'SYNCING' ? 'Sync in progress…' : 'Sync to fetch files.'}"></p>
+    </div>
+
+</div>
+
+<footer class="bg-dark text-center py-3 mt-auto">
+    <span class="text-white-50 small">
+        <svg width="13" height="13" viewBox="0 0 28 28" fill="none" class="me-1 mb-1">
+            <rect width="28" height="28" rx="6" fill="#e94560"/>
+            <path d="M5 8h18M5 13h12M5 18h14M5 23h9" stroke="white" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+        FileScanner &copy; 2026 &mdash; Powered by Spring Boot &amp; Claude AI
+    </span>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script th:inline="javascript">
+/*<![CDATA[*/
+// Extension pie chart
+const extStats = /*[[${extStats}]]*/ [];
+if (extStats.length > 0) {
+    const labels = extStats.slice(0,12).map(r => r[0] || 'other');
+    const counts  = extStats.slice(0,12).map(r => r[1]);
+    const colors = ['#0d6efd','#6f42c1','#d63384','#fd7e14','#ffc107',
+                    '#20c997','#0dcaf0','#198754','#dc3545','#6c757d','#495057','#adb5bd'];
+    new Chart(document.getElementById('extChart'), {
+        type: 'doughnut',
+        data: { labels, datasets: [{ data: counts, backgroundColor: colors, borderWidth: 1 }] },
+        options: {
+            plugins: { legend: { position: 'right', labels: { boxWidth: 12, font: { size: 11 } } } },
+            onClick(evt, elements) {
+                if (!elements.length) return;
+                const ext = labels[elements[0].index];
+                const accountId = /*[[${account.id}]]*/ 0;
+                window.location.href = '/cloud/' + accountId + '/browse?search=.' + encodeURIComponent(ext);
+            }
+        }
+    });
+}
+
+// SSE sync progress
+const isSyncing = /*[[${syncing}]]*/ false;
+if (isSyncing) {
+    const accountId = /*[[${account.id}]]*/ 0;
+    const msgEl   = document.getElementById('prog-msg');
+    const countEl = document.getElementById('prog-count');
+    const src = new EventSource('/cloud/' + accountId + '/progress');
+    src.addEventListener('progress', e => {
+        const d = JSON.parse(e.data);
+        if (msgEl)   msgEl.textContent   = d.message;
+        if (countEl && d.count > 0) countEl.textContent = d.count.toLocaleString() + ' items fetched';
+        if (d.done)  { src.close(); setTimeout(() => location.reload(), 1000); }
+    });
+}
+/*]]>*/
+</script>
+</body>
+</html>

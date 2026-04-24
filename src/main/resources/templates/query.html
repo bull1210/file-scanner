@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>AI Query — File Scanner</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <style>
+        body { background: #f0f2f5; }
+        .ai-badge { background: linear-gradient(90deg, #f59e0b, #ef4444); }
+        pre.sql-block {
+            background: #1e1e2e;
+            color: #cdd6f4;
+            border-radius: 10px;
+            padding: 1rem 1.25rem;
+            font-size: 0.85rem;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        .example-pill {
+            cursor: pointer;
+            user-select: none;
+        }
+        .example-pill:hover { opacity: 0.8; }
+    </style>
+</head>
+<body class="d-flex flex-column min-vh-100">
+
+<!-- Navbar -->
+<nav class="navbar navbar-dark shadow-sm" style="background:linear-gradient(135deg,#1a1a2e 0%,#0f3460 100%)">
+    <div class="container-fluid px-4">
+        <a class="navbar-brand fw-bold d-flex align-items-center" href="/">
+            <svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg" class="me-2">
+                <rect width="28" height="28" rx="6" fill="#e94560"/>
+                <path d="M5 8h18M5 13h12M5 18h14M5 23h9" stroke="white" stroke-width="2" stroke-linecap="round"/>
+                <circle cx="21" cy="20" r="5" fill="#f59e0b"/>
+                <path d="M19 20h4M21 18v4" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+            FileScanner
+        </a>
+        <div class="d-flex gap-2">
+            <a href="/" class="btn btn-sm btn-outline-light"><i class="bi bi-house-fill me-1"></i>Home</a>
+        </div>
+    </div>
+</nav>
+
+<div class="container py-5 flex-grow-1" style="max-width: 960px">
+
+    <!-- Breadcrumb -->
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="/">Home</a></li>
+            <li class="breadcrumb-item active">AI Query</li>
+        </ol>
+    </nav>
+
+    <div class="d-flex align-items-center mb-2">
+        <h2 class="fw-bold mb-0 me-3">
+            <i class="bi bi-stars me-2 text-warning"></i>Natural Language Query
+        </h2>
+        <span class="badge ai-badge text-white px-3 py-1">Powered by Claude</span>
+    </div>
+    <p class="text-muted mb-4">Ask questions about your scanned files in plain English. Claude will generate the SQL and run it.</p>
+
+    <!-- Query form -->
+    <div class="card shadow-sm rounded-4 mb-4">
+        <div class="card-body p-4">
+            <form th:action="@{/query}" method="post" id="queryForm">
+                <div class="mb-3">
+                    <label for="prompt" class="form-label fw-semibold">Your question</label>
+                    <textarea class="form-control" id="prompt" name="prompt" rows="3"
+                              placeholder="e.g. Show me all Java files larger than 1MB modified in the last 30 days"
+                              th:text="${prompt}"></textarea>
+                </div>
+                <div class="d-flex align-items-center gap-3">
+                    <button class="btn btn-warning fw-semibold px-4" type="submit" id="askBtn">
+                        <i class="bi bi-stars me-1"></i>Ask Claude
+                    </button>
+                    <button type="button" class="btn btn-outline-secondary btn-sm"
+                            onclick="document.getElementById('prompt').value=''; document.getElementById('prompt').focus()">
+                        Clear
+                    </button>
+                    <span class="text-muted small" id="loadingMsg" style="display:none">
+                        <span class="spinner-border spinner-border-sm me-1"></span>Generating SQL…
+                    </span>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Example prompts -->
+    <div class="mb-4">
+        <p class="text-muted small mb-2 fw-semibold">Example questions — click to fill:</p>
+        <div class="d-flex flex-wrap gap-2">
+            <span class="badge bg-light text-dark border example-pill py-2 px-3"
+                  onclick="setPrompt(this)">Show me the 10 largest files</span>
+            <span class="badge bg-light text-dark border example-pill py-2 px-3"
+                  onclick="setPrompt(this)">How many files per extension?</span>
+            <span class="badge bg-light text-dark border example-pill py-2 px-3"
+                  onclick="setPrompt(this)">List all PDF files modified in the last 30 days</span>
+            <span class="badge bg-light text-dark border example-pill py-2 px-3"
+                  onclick="setPrompt(this)">Files not modified in over a year</span>
+            <span class="badge bg-light text-dark border example-pill py-2 px-3"
+                  onclick="setPrompt(this)">Show all Java files larger than 500KB</span>
+            <span class="badge bg-light text-dark border example-pill py-2 px-3"
+                  onclick="setPrompt(this)">Which directories have the most files?</span>
+            <span class="badge bg-light text-dark border example-pill py-2 px-3"
+                  onclick="setPrompt(this)">Total size grouped by extension</span>
+            <span class="badge bg-light text-dark border example-pill py-2 px-3"
+                  onclick="setPrompt(this)">Files created today</span>
+        </div>
+    </div>
+
+    <!-- Error -->
+    <div th:if="${errorMessage}" class="alert alert-danger rounded-3 mb-4">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i><span th:text="${errorMessage}"></span>
+    </div>
+
+    <!-- Results -->
+    <div th:if="${result}">
+
+        <!-- Generated SQL -->
+        <div class="mb-3">
+            <div class="d-flex align-items-center mb-2">
+                <span class="fw-semibold me-2"><i class="bi bi-code-slash me-1 text-info"></i>Generated SQL</span>
+                <button class="btn btn-outline-secondary btn-sm" onclick="copySQL()">
+                    <i class="bi bi-clipboard me-1"></i>Copy
+                </button>
+            </div>
+            <pre class="sql-block" id="sqlBlock" th:text="${result.generatedSql}"></pre>
+        </div>
+
+        <!-- Empty notice -->
+        <div th:if="${result.empty}" class="alert alert-secondary rounded-3">
+            <i class="bi bi-inbox me-2"></i>No results found for this query.
+        </div>
+
+        <!-- Result table -->
+        <div th:unless="${result.empty}" class="card shadow-sm rounded-4">
+            <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center pt-3">
+                <span class="fw-semibold"><i class="bi bi-table me-2 text-success"></i>Results</span>
+                <span class="badge bg-success rounded-pill" th:text="${result.rowCount} + ' rows'"></span>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-sm table-striped table-hover align-middle mb-0">
+                        <thead class="table-dark">
+                            <tr>
+                                <th th:each="col : ${result.columns}" th:text="${col}"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr th:each="row : ${result.rows}">
+                                <td th:each="col : ${result.columns}"
+                                    th:text="${row[col]}"></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<!-- Footer -->
+<footer class="bg-dark text-center py-3 mt-auto">
+    <span class="text-white-50 small">
+        <svg width="13" height="13" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg" class="me-1 mb-1">
+            <rect width="28" height="28" rx="6" fill="#e94560"/>
+            <path d="M5 8h18M5 13h12M5 18h14M5 23h9" stroke="white" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+        FileScanner &copy; 2026 &mdash; Powered by Spring Boot &amp; Claude AI
+    </span>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+function setPrompt(el) {
+    document.getElementById('prompt').value = el.textContent.trim();
+    document.getElementById('prompt').focus();
+}
+function copySQL() {
+    const txt = document.getElementById('sqlBlock').textContent;
+    navigator.clipboard.writeText(txt).then(() => {
+        const btn = event.target.closest('button');
+        btn.innerHTML = '<i class="bi bi-clipboard-check me-1"></i>Copied!';
+        setTimeout(() => btn.innerHTML = '<i class="bi bi-clipboard me-1"></i>Copy', 1500);
+    });
+}
+document.getElementById('queryForm').addEventListener('submit', function() {
+    document.getElementById('loadingMsg').style.display = 'inline';
+    document.getElementById('askBtn').disabled = true;
+});
+</script>
+</body>
+</html>

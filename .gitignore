@@ -1,0 +1,39 @@
+target/
+*.class
+*.jar
+*.war
+*.ear
+
+# H2 database files
+*.mv.db
+*.trace.db
+
+# Maven
+.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+
+# IDE
+.idea/
+*.iml
+*.iws
+.project
+.classpath
+.settings/
+*.launch
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Generated reports
+reports/
+
+# Environment / secrets
+.env
+application-local.properties
