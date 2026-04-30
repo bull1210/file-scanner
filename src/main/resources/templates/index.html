@@ -125,6 +125,9 @@
                             <a th:href="@{/browse/{id}(id=${s.id})}" class="btn btn-sm btn-outline-secondary">
                                 <i class="bi bi-folder2-open"></i> Browse
                             </a>
+                            <a th:href="@{/duplicates/{id}(id=${s.id})}" class="btn btn-sm btn-outline-danger">
+                                <i class="bi bi-copy"></i> Duplicates
+                            </a>
                         </td>
                     </tr>
                     </tbody>

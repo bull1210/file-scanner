@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title th:text="'Duplicates — Scan #' + ${scan.id}">Duplicates</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <style>
+        body { background: #f0f2f5; }
+        .group-header { background: #f8f9fa; }
+        .group-name   { font-family: monospace; font-weight: 600; font-size: .9rem; word-break: break-all; }
+        .path-cell    { max-width: 480px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+                        font-family: monospace; font-size: .8rem; color: #495057; }
+        .accordion-button:not(.collapsed) { background: #fff3cd; color: #343a40; box-shadow: none; }
+        .accordion-button::after { margin-left: auto; }
+        .stat-pill    { font-size: .72rem; }
+        .wasted-badge { background: #dc3545; }
+    </style>
+</head>
+<body class="d-flex flex-column min-vh-100">
+
+<!-- Navbar -->
+<nav class="navbar navbar-dark shadow-sm" style="background:linear-gradient(135deg,#1a1a2e 0%,#0f3460 100%)">
+    <div class="container-fluid px-4">
+        <a class="navbar-brand fw-bold d-flex align-items-center" href="/">
+            <svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg" class="me-2">
+                <rect width="28" height="28" rx="6" fill="#e94560"/>
+                <path d="M5 8h18M5 13h12M5 18h14M5 23h9" stroke="white" stroke-width="2" stroke-linecap="round"/>
+                <circle cx="21" cy="20" r="5" fill="#f59e0b"/>
+                <path d="M19 20h4M21 18v4" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+            FileScanner
+        </a>
+        <div class="d-flex gap-2">
+            <a href="/" class="btn btn-sm btn-outline-light"><i class="bi bi-house-fill me-1"></i>Home</a>
+            <a th:href="@{/dashboard/{id}(id=${scan.id})}" class="btn btn-sm btn-outline-light">
+                <i class="bi bi-bar-chart-fill me-1"></i>Dashboard
+            </a>
+            <a th:href="@{/browse/{id}(id=${scan.id})}" class="btn btn-sm btn-outline-light">
+                <i class="bi bi-folder2-open me-1"></i>Browse
+            </a>
+            <a href="/query" class="btn btn-sm btn-warning fw-semibold">
+                <i class="bi bi-stars me-1"></i>AI Query
+            </a>
+        </div>
+    </div>
+</nav>
+
+<div class="container-fluid px-4 py-4 flex-grow-1">
+
+    <!-- Breadcrumb -->
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="/">Home</a></li>
+            <li class="breadcrumb-item">
+                <a th:href="@{/dashboard/{id}(id=${scan.id})}">Dashboard #<span th:text="${scan.id}"></span></a>
+            </li>
+            <li class="breadcrumb-item active">Duplicate Files</li>
+        </ol>
+    </nav>
+
+    <!-- Page header -->
+    <div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-2">
+        <div>
+            <h2 class="fw-bold mb-0">
+                <i class="bi bi-copy me-2 text-danger"></i>Duplicate Files
+            </h2>
+            <p class="text-muted mb-0 small" th:text="${scan.rootPath}"></p>
+        </div>
+        <a th:href="@{/duplicates/{id}/export.csv(id=${scan.id})}"
+           class="btn btn-success fw-semibold"
+           th:classappend="${totalGroups == 0} ? ' disabled' : ''">
+            <i class="bi bi-file-earmark-spreadsheet me-1"></i>Export CSV
+        </a>
+    </div>
+
+    <!-- Flash messages -->
+    <div th:if="${successMessage}" class="alert alert-success alert-dismissible fade show" role="alert">
+        <i class="bi bi-check-circle-fill me-2"></i><span th:text="${successMessage}"></span>
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    <div th:if="${errorMessage}" class="alert alert-danger alert-dismissible fade show" role="alert">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i><span th:text="${errorMessage}"></span>
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+
+    <!-- Summary cards -->
+    <div class="row g-3 mb-4">
+        <div class="col-sm-4">
+            <div class="card border-0 shadow-sm rounded-4 h-100">
+                <div class="card-body text-center py-3">
+                    <div class="fs-2 fw-bold text-danger" th:text="${totalGroups}">0</div>
+                    <div class="text-muted small">Duplicate Filenames</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-4">
+            <div class="card border-0 shadow-sm rounded-4 h-100">
+                <div class="card-body text-center py-3">
+                    <div class="fs-2 fw-bold text-warning" th:text="${totalFiles}">0</div>
+                    <div class="text-muted small">Total Duplicate Copies</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-4">
+            <div class="card border-0 shadow-sm rounded-4 h-100">
+                <div class="card-body text-center py-3">
+                    <div class="fs-2 fw-bold text-primary"
+                         th:text="${T(com.filescanner.dto.StatsDto).formatBytes(totalSize)}">0</div>
+                    <div class="text-muted small">Total Space Used by Duplicates</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Empty state -->
+    <div th:if="${totalGroups == 0}" class="card border-0 shadow-sm rounded-4 text-center py-5">
+        <div class="card-body">
+            <i class="bi bi-check-circle-fill text-success fs-1 mb-3 d-block"></i>
+            <h5 class="fw-semibold">No duplicate filenames found</h5>
+            <p class="text-muted">All file names in scan #<span th:text="${scan.id}"></span> are unique.</p>
+        </div>
+    </div>
+
+    <!-- Duplicates accordion -->
+    <div th:unless="${totalGroups == 0}" class="accordion shadow-sm rounded-4 overflow-hidden" id="dupAccordion">
+        <div th:each="group, gStat : ${groups}"
+             class="accordion-item border-0 border-bottom">
+            <h2 class="accordion-header" th:id="'heading-' + ${gStat.index}">
+                <button class="accordion-button collapsed group-header py-2 px-3"
+                        type="button"
+                        data-bs-toggle="collapse"
+                        th:data-bs-target="'#collapse-' + ${gStat.index}"
+                        th:aria-controls="'collapse-' + ${gStat.index}"
+                        aria-expanded="false">
+                    <div class="d-flex align-items-center gap-2 flex-wrap w-100 me-2">
+                        <i class="bi bi-files text-danger flex-shrink-0"></i>
+                        <span class="group-name" th:text="${group.name}"></span>
+                        <span class="badge bg-danger stat-pill ms-1"
+                              th:text="${group.count} + ' copies'"></span>
+                        <span class="badge bg-secondary stat-pill"
+                              th:text="${T(com.filescanner.dto.StatsDto).formatBytes(group.totalSizeBytes)} + ' total'"></span>
+                    </div>
+                </button>
+            </h2>
+            <div th:id="'collapse-' + ${gStat.index}"
+                 class="accordion-collapse collapse"
+                 th:aria-labelledby="'heading-' + ${gStat.index}">
+                <div class="accordion-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Full Path</th>
+                                    <th style="width:100px" class="text-end">Size</th>
+                                    <th style="width:150px">Last Modified</th>
+                                    <th style="width:90px" class="text-center">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                            <tr th:each="file : ${group.files}">
+                                <td class="path-cell" th:title="${file.fullPath}" th:text="${file.fullPath}"></td>
+                                <td class="text-end font-monospace small"
+                                    th:text="${T(com.filescanner.dto.StatsDto).formatBytes(file.sizeBytes != null ? file.sizeBytes : 0)}">
+                                </td>
+                                <td class="text-muted small"
+                                    th:text="${file.lastModified != null ? #temporals.format(file.lastModified, 'yyyy-MM-dd HH:mm') : '—'}">
+                                </td>
+                                <td class="text-center">
+                                    <button type="button"
+                                            class="btn btn-sm btn-outline-danger"
+                                            data-bs-toggle="modal"
+                                            data-bs-target="#deleteModal"
+                                            th:data-file-id="${file.id}"
+                                            th:data-file-path="${file.fullPath}"
+                                            th:data-scan-id="${scan.id}">
+                                        <i class="bi bi-trash3"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<!-- Delete confirmation modal -->
+<div class="modal fade" id="deleteModal" tabindex="-1" aria-labelledby="deleteModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-danger text-white border-0">
+                <h5 class="modal-title" id="deleteModalLabel">
+                    <i class="bi bi-exclamation-triangle-fill me-2"></i>Delete File
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-2">This will <strong>permanently delete</strong> the file from disk and remove it from the scan record. This action cannot be undone.</p>
+                <div class="bg-light rounded p-2 mt-3">
+                    <code id="deleteFilePath" class="small text-break"></code>
+                </div>
+            </div>
+            <div class="modal-footer border-0 pt-0">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <form id="deleteForm" method="post">
+                    <button type="submit" class="btn btn-danger">
+                        <i class="bi bi-trash3-fill me-1"></i>Delete Permanently
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Footer -->
+<footer class="bg-dark text-center py-3 mt-auto">
+    <span class="text-white-50 small">
+        <svg width="13" height="13" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg" class="me-1 mb-1">
+            <rect width="28" height="28" rx="6" fill="#e94560"/>
+            <path d="M5 8h18M5 13h12M5 18h14M5 23h9" stroke="white" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+        FileScanner &copy; 2026 &mdash; Powered by Spring Boot &amp; Claude AI
+    </span>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    const deleteModal = document.getElementById('deleteModal');
+    deleteModal.addEventListener('show.bs.modal', function (event) {
+        const btn    = event.relatedTarget;
+        const fileId = btn.getAttribute('data-file-id');
+        const path   = btn.getAttribute('data-file-path');
+        const scanId = btn.getAttribute('data-scan-id');
+
+        document.getElementById('deleteFilePath').textContent = path;
+        document.getElementById('deleteForm').action = '/duplicates/' + scanId + '/delete/' + fileId;
+    });
+</script>
+</body>
+</html>

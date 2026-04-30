@@ -34,6 +34,11 @@
         <div class="d-flex gap-2">
             <a href="/" class="btn btn-sm btn-outline-light"><i class="bi bi-house-fill me-1"></i>Home</a>
             <a href="/cloud" class="btn btn-sm btn-outline-light"><i class="bi bi-cloud-fill me-1"></i>Cloud</a>
+            <a th:if="${account.status == 'SYNCED'}"
+               th:href="@{/cloud/{id}/duplicates(id=${account.id})}"
+               class="btn btn-sm btn-outline-danger">
+                <i class="bi bi-copy me-1"></i>Duplicates
+            </a>
             <a href="/audit" class="btn btn-sm btn-outline-light"><i class="bi bi-shield-check me-1"></i>Audit</a>
             <a href="/query" class="btn btn-sm btn-warning fw-semibold"><i class="bi bi-stars me-1"></i>AI Query</a>
         </div>

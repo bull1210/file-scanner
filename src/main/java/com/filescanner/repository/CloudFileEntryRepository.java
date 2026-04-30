@@ -43,6 +43,18 @@ public interface CloudFileEntryRepository extends JpaRepository<CloudFileEntry, 
 
     long countByAccountId(Long accountId);
 
+    @Query("""
+            SELECT c FROM CloudFileEntry c
+            WHERE c.accountId = :accountId AND c.directory = false
+              AND c.name IN (
+                  SELECT c2.name FROM CloudFileEntry c2
+                  WHERE c2.accountId = :accountId AND c2.directory = false
+                  GROUP BY c2.name HAVING COUNT(c2) > 1
+              )
+            ORDER BY c.name ASC, c.sizeBytes DESC
+            """)
+    List<CloudFileEntry> findAllDuplicateFiles(@Param("accountId") Long accountId);
+
     @Modifying
     @Transactional
     @Query("DELETE FROM CloudFileEntry c WHERE c.accountId = :accountId")
