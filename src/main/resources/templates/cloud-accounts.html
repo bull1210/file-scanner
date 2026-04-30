@@ -186,6 +186,12 @@
                            class="btn btn-outline-secondary btn-sm">
                             <i class="bi bi-folder2-open me-1"></i>Browse
                         </a>
+                        <!-- Duplicates -->
+                        <a th:if="${acc.status == 'SYNCED'}"
+                           th:href="@{/cloud/{id}/duplicates(id=${acc.id})}"
+                           class="btn btn-outline-danger btn-sm">
+                            <i class="bi bi-copy me-1"></i>Duplicates
+                        </a>
                         <!-- Delete -->
                         <form th:action="@{/cloud/{id}/delete(id=${acc.id})}" method="post" class="d-inline"
                               onsubmit="return confirm('Delete this account and all its files?')">

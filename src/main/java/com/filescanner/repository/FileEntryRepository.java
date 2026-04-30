@@ -64,6 +64,18 @@ public interface FileEntryRepository extends JpaRepository<FileEntry, Long> {
             """)
     List<Object[]> totalCountAndSize(@Param("scanId") Long scanId);
 
+    @Query("""
+            SELECT e FROM FileEntry e
+            WHERE e.scanId = :scanId AND e.directory = false
+              AND e.name IN (
+                  SELECT e2.name FROM FileEntry e2
+                  WHERE e2.scanId = :scanId AND e2.directory = false
+                  GROUP BY e2.name HAVING COUNT(e2) > 1
+              )
+            ORDER BY e.name ASC, e.sizeBytes DESC
+            """)
+    List<FileEntry> findAllDuplicateFiles(@Param("scanId") Long scanId);
+
     @Modifying
     @Transactional
     @Query("DELETE FROM FileEntry e WHERE e.scanId = :scanId")

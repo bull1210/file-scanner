@@ -32,6 +32,9 @@
             <a th:href="@{/dashboard/{id}(id=${scan.id})}" class="btn btn-sm btn-outline-light">
                 <i class="bi bi-bar-chart-fill me-1"></i>Dashboard
             </a>
+            <a th:href="@{/duplicates/{id}(id=${scan.id})}" class="btn btn-sm btn-outline-danger">
+                <i class="bi bi-copy me-1"></i>Duplicates
+            </a>
             <a th:href="@{/audit(path=${currentPath})}" class="btn btn-sm btn-outline-light">
                 <i class="bi bi-shield-check me-1"></i>Audit
             </a>

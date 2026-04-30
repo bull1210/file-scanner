@@ -34,6 +34,9 @@
             <a th:href="@{/browse/{id}(id=${scan.id})}" class="btn btn-sm btn-outline-light">
                 <i class="bi bi-folder2-open me-1"></i>Browse
             </a>
+            <a th:href="@{/duplicates/{id}(id=${scan.id})}" class="btn btn-sm btn-outline-danger">
+                <i class="bi bi-copy me-1"></i>Duplicates
+            </a>
             <a th:href="@{/audit(path=${scan.rootPath})}" class="btn btn-sm btn-outline-light">
                 <i class="bi bi-shield-check me-1"></i>Audit
             </a>

@@ -1,10 +1,12 @@
 package com.filescanner.controller;
 
+import com.filescanner.dto.CloudDuplicateGroup;
 import com.filescanner.entity.CloudAccount;
 import com.filescanner.entity.CloudFileEntry;
 import com.filescanner.repository.CloudAccountRepository;
 import com.filescanner.repository.CloudFileEntryRepository;
 import com.filescanner.service.CloudSyncService;
+import com.filescanner.service.DuplicateService;
 import com.filescanner.service.GoogleDriveService;
 import com.filescanner.service.OneDriveService;
 import jakarta.servlet.http.HttpSession;
@@ -13,7 +15,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
@@ -33,6 +37,7 @@ public class CloudController {
     private final CloudAccountRepository   accountRepo;
     private final CloudFileEntryRepository fileRepo;
     private final CloudSyncService         syncService;
+    private final DuplicateService         duplicateService;
     private final OneDriveService          oneDrive;
     private final GoogleDriveService       googleDrive;
 
@@ -241,6 +246,54 @@ public class CloudController {
         model.addAttribute("search",      search);
         model.addAttribute("breadcrumbs", buildBreadcrumbs(currentPath));
         return "cloud-browse";
+    }
+
+    // =========================================================================
+    // Cloud duplicate detection
+    // =========================================================================
+
+    @GetMapping("/{id}/duplicates")
+    public String showDuplicates(@PathVariable Long id, Model model, RedirectAttributes ra) {
+        CloudAccount account = accountRepo.findById(id).orElse(null);
+        if (account == null) { ra.addFlashAttribute("errorMessage", "Account not found."); return "redirect:/cloud"; }
+
+        List<CloudDuplicateGroup> groups = duplicateService.findCloudDuplicates(id);
+        long totalFiles = groups.stream().mapToLong(CloudDuplicateGroup::getCount).sum();
+        long totalSize  = groups.stream().mapToLong(CloudDuplicateGroup::getTotalSizeBytes).sum();
+
+        model.addAttribute("account",     account);
+        model.addAttribute("groups",      groups);
+        model.addAttribute("totalGroups", groups.size());
+        model.addAttribute("totalFiles",  totalFiles);
+        model.addAttribute("totalSize",   totalSize);
+        return "cloud-duplicates";
+    }
+
+    @PostMapping("/{id}/duplicates/remove/{entryId}")
+    public String removeCloudEntry(@PathVariable Long id,
+                                   @PathVariable Long entryId,
+                                   RedirectAttributes ra) {
+        try {
+            duplicateService.removeCloudEntry(entryId);
+            ra.addFlashAttribute("successMessage", "Entry removed from scan index.");
+        } catch (IllegalArgumentException e) {
+            ra.addFlashAttribute("errorMessage", e.getMessage());
+        }
+        return "redirect:/cloud/" + id + "/duplicates";
+    }
+
+    @GetMapping("/{id}/duplicates/export.csv")
+    public ResponseEntity<byte[]> exportCloudCsv(@PathVariable Long id, RedirectAttributes ra) {
+        if (!accountRepo.existsById(id)) {
+            return ResponseEntity.notFound().build();
+        }
+        List<CloudDuplicateGroup> groups = duplicateService.findCloudDuplicates(id);
+        byte[] csv = duplicateService.exportCloudCsv(groups);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"duplicates-cloud-" + id + ".csv\"")
+                .contentType(MediaType.parseMediaType("text/csv;charset=UTF-8"))
+                .body(csv);
     }
 
     // =========================================================================
