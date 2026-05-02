@@ -24,6 +24,10 @@ public class StatsDto {
 
     private long[] ageBuckets;
 
+    private Long duplicateGroupCount;
+    private Long duplicateWastedBytes;
+    private Long directoryCount;
+
     public String getFormattedTotalSize() {
         return formatBytes(totalSizeBytes);
     }

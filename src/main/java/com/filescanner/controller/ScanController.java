@@ -19,7 +19,12 @@ public class ScanController {
 
     @GetMapping("/")
     public String index(Model model) {
-        model.addAttribute("scans", scanService.getAllScans());
+        var scans = scanService.getAllScans();
+        model.addAttribute("scans", scans);
+        model.addAttribute("totalFilesIndexed",
+                scans.stream().mapToLong(s -> s.getTotalFiles() != null ? s.getTotalFiles() : 0L).sum());
+        model.addAttribute("totalSizeIndexed",
+                scans.stream().mapToLong(s -> s.getTotalSizeBytes() != null ? s.getTotalSizeBytes() : 0L).sum());
         return "index";
     }
 

@@ -1,501 +1,383 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org" lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Audit — File Scanner</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
-    <style>
-        body { background: #f0f2f5; }
-        .event-new { animation: highlight 1.8s ease-out; }
-        @keyframes highlight { from { background:#fff3cd; } to { background:transparent; } }
-        .badge-CREATED    { background:#10b981; }
-        .badge-DELETED    { background:#ef4444; }
-        .badge-MODIFIED   { background:#3b82f6; }
-        .badge-RENAMED    { background:#8b5cf6; }
-        .badge-READ       { background:#06b6d4; }
-        .badge-WRITE      { background:#f97316; }
-        .badge-ACCESS     { background:#6b7280; }
-        .badge-PERMISSION_CHANGED { background:#f59e0b; }
-        .badge-WATCHSERVICE { background:#6366f1; font-size:0.65rem; }
-        .badge-WINEVENTLOG  { background:#0ea5e9; font-size:0.65rem; }
-        .path-cell { max-width: 380px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; direction:rtl; text-align:left; }
-        #liveCounter { transition: transform .15s; }
-        #liveCounter.bump { transform: scale(1.4); }
-        .filter-pill.active { background:#1a1a2e !important; color:#fff !important; border-color:#1a1a2e !important; }
-        pre.ps-code { background:#1e1e2e; color:#cdd6f4; border-radius:8px; padding:.75rem 1rem; font-size:.8rem; }
-    </style>
-</head>
-<body class="d-flex flex-column min-vh-100">
+<head th:replace="~{fragments/head :: head(title='Audit')}"></head>
+<body>
+<div class="app-layout">
 
-<!-- Navbar -->
-<nav class="navbar navbar-dark shadow-sm" style="background:linear-gradient(135deg,#1a1a2e 0%,#0f3460 100%)">
-    <div class="container-fluid px-4">
-        <a class="navbar-brand fw-bold d-flex align-items-center" href="/">
-            <svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg" class="me-2">
-                <rect width="28" height="28" rx="6" fill="#e94560"/>
-                <path d="M5 8h18M5 13h12M5 18h14M5 23h9" stroke="white" stroke-width="2" stroke-linecap="round"/>
-                <circle cx="21" cy="20" r="5" fill="#f59e0b"/>
-                <path d="M19 20h4M21 18v4" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
-            </svg>
-            FileScanner
-        </a>
-        <div class="d-flex gap-2">
-            <a href="/" class="btn btn-sm btn-outline-light"><i class="bi bi-house-fill me-1"></i>Home</a>
-            <a href="/query" class="btn btn-sm btn-warning fw-semibold"><i class="bi bi-stars me-1"></i>AI Query</a>
-        </div>
-    </div>
-</nav>
+  <th:block th:replace="~{fragments/sidebar :: sidebar(active='audit')}"></th:block>
 
-<div class="container-fluid px-4 py-4 flex-grow-1">
-
-    <!-- Breadcrumb -->
-    <nav aria-label="breadcrumb" class="mb-3">
-        <ol class="breadcrumb">
-            <li class="breadcrumb-item"><a href="/">Home</a></li>
-            <li class="breadcrumb-item active">Audit</li>
-        </ol>
-    </nav>
-
-    <!-- Flash messages -->
-    <div th:if="${successMessage}" class="alert alert-success alert-dismissible fade show rounded-3 mb-3">
-        <i class="bi bi-check-circle-fill me-2"></i><span th:text="${successMessage}"></span>
-        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-    </div>
-    <div th:if="${errorMessage}" class="alert alert-danger alert-dismissible fade show rounded-3 mb-3">
-        <i class="bi bi-exclamation-triangle-fill me-2"></i><span th:text="${errorMessage}"></span>
-        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-    </div>
-    <div th:if="${warnMessage}" class="alert alert-warning alert-dismissible fade show rounded-3 mb-3">
-        <i class="bi bi-exclamation-circle-fill me-2"></i><span th:text="${warnMessage}"></span>
-        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+  <div class="app-main">
+    <div class="topbar">
+      <div>
+        <h1 class="topbar-title">
+          Audit &amp; Monitoring
+          <span th:if="${monitoring}"
+                style="display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:oklch(50% 0.18 145);vertical-align:middle;margin-left:8px;">
+            <span class="live-dot"></span> LIVE
+          </span>
+        </h1>
+        <p class="topbar-sub mono" style="font-size:12px;"
+           th:text="${folderPath != null ? folderPath : 'Select a folder to monitor'}"></p>
+      </div>
+      <div class="topbar-actions" th:if="${folderPath != null}">
+        <form th:unless="${monitoring}" th:action="@{/audit/start}" method="post" style="display:inline;">
+          <input type="hidden" name="folderPath" th:value="${folderPath}">
+          <button type="submit" class="btn btn-success btn-sm">Start Monitor</button>
+        </form>
+        <form th:if="${monitoring}" th:action="@{/audit/stop}" method="post" style="display:inline;">
+          <input type="hidden" name="folderPath" th:value="${folderPath}">
+          <button type="submit" class="btn btn-danger btn-sm">Stop Monitor</button>
+        </form>
+        <button type="button" class="btn btn-ghost btn-sm"
+                onclick="document.getElementById('winlogPanel').style.display = document.getElementById('winlogPanel').style.display === 'none' ? 'block' : 'none'">
+          Fetch Win Event Log
+        </button>
+      </div>
     </div>
 
-    <!-- =====================================================================
-         STATE A: No folder selected — show picker + active monitors
-         ===================================================================== -->
-    <div th:unless="${folderPath != null}">
+    <div class="app-content screen-enter">
 
-        <div class="d-flex align-items-center mb-4">
-            <h2 class="fw-bold mb-0 me-3">
-                <i class="bi bi-shield-check me-2 text-primary"></i>File System Audit
-            </h2>
-            <span class="badge bg-dark px-3 py-1">Windows</span>
-        </div>
+      <!-- STATE A: No folder selected -->
+      <div th:unless="${folderPath != null}">
 
         <!-- Folder picker -->
-        <div class="card shadow-sm rounded-4 mb-4">
-            <div class="card-header bg-white border-0 fw-semibold pt-3">
-                <i class="bi bi-folder2-open me-2 text-warning"></i>Select Folder to Audit
-            </div>
-            <div class="card-body">
-                <form th:action="@{/audit}" method="get">
-                    <div class="input-group input-group-lg">
-                        <span class="input-group-text bg-white"><i class="bi bi-folder-fill text-muted"></i></span>
-                        <input type="text" class="form-control" name="path"
-                               placeholder="e.g. C:\Users\you\Documents" required autofocus>
-                        <button class="btn btn-primary px-4 fw-semibold" type="submit">
-                            <i class="bi bi-shield-check me-1"></i>Open Audit
-                        </button>
-                    </div>
-                </form>
-            </div>
+        <div class="card" style="margin-bottom:24px;">
+          <div class="card-body">
+            <div style="font-size:14px;font-weight:600;margin-bottom:4px;">Select Folder to Audit</div>
+            <div style="font-size:13px;color:var(--text-muted);margin-bottom:14px;">Enter the absolute path of any directory to start monitoring file changes.</div>
+            <form th:action="@{/audit}" method="get">
+              <div class="path-form">
+                <span class="path-form-icon">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+                </span>
+                <input type="text" name="path" required autofocus class="path-form-input"
+                       placeholder="C:\Users\you\Documents">
+                <button type="submit" class="path-form-btn">Open Audit</button>
+              </div>
+            </form>
+          </div>
         </div>
 
         <!-- Active monitors -->
-        <div th:if="${!monitoredPaths.isEmpty()}" class="card shadow-sm rounded-4 mb-4">
-            <div class="card-header bg-white border-0 fw-semibold pt-3">
-                <i class="bi bi-activity me-2 text-success"></i>Active Live Monitors
-            </div>
-            <div class="card-body p-0">
-                <table class="table table-hover align-middle mb-0">
-                    <thead class="table-light">
-                        <tr><th>Folder</th><th>Status</th><th></th></tr>
-                    </thead>
-                    <tbody>
-                    <tr th:each="mp : ${monitoredPaths}">
-                        <td class="font-monospace small" th:text="${mp}"></td>
-                        <td><span class="badge bg-success"><i class="bi bi-circle-fill me-1" style="font-size:.5rem"></i>Monitoring</span></td>
-                        <td>
-                            <a th:href="@{/audit(path=${mp})}" class="btn btn-sm btn-outline-primary">
-                                <i class="bi bi-eye me-1"></i>View
-                            </a>
-                        </td>
-                    </tr>
-                    </tbody>
-                </table>
-            </div>
+        <div th:if="${!monitoredPaths.isEmpty()}" class="card" style="margin-bottom:24px;padding:0;">
+          <div style="padding:14px 16px;border-bottom:1px solid var(--border);font-size:13px;font-weight:600;">
+            Active Live Monitors
+          </div>
+          <table class="data-table">
+            <thead><tr><th>Folder</th><th>Status</th><th></th></tr></thead>
+            <tbody>
+              <tr th:each="mp : ${monitoredPaths}">
+                <td class="mono" style="font-size:12px;" th:text="${mp}"></td>
+                <td>
+                  <span style="display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;color:oklch(50% 0.18 145);">
+                    <span class="live-dot"></span> Monitoring
+                  </span>
+                </td>
+                <td>
+                  <a th:href="@{/audit(path=${mp})}" class="btn btn-ghost btn-sm">View</a>
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
 
-        <!-- Info about the two audit methods -->
-        <div class="row g-3">
-            <div class="col-md-6">
-                <div class="card shadow-sm rounded-4 h-100">
-                    <div class="card-body p-4">
-                        <h5 class="fw-bold"><i class="bi bi-activity me-2 text-success"></i>Live File Monitor</h5>
-                        <p class="text-muted small mb-2">Real-time file system events using Java WatchService (ReadDirectoryChangesW).</p>
-                        <ul class="small text-muted mb-0">
-                            <li>Detects: <strong>Create, Delete, Modify, Rename</strong></li>
-                            <li>No admin privileges required</li>
-                            <li>Events stream live to the browser via SSE</li>
-                            <li>Monitors all sub-directories recursively</li>
-                        </ul>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-6">
-                <div class="card shadow-sm rounded-4 h-100">
-                    <div class="card-body p-4">
-                        <h5 class="fw-bold"><i class="bi bi-windows me-2 text-primary"></i>Windows Security Event Log</h5>
-                        <p class="text-muted small mb-2">Reads Security Event Log (Event IDs 4663, 4660, 4670) for deep auditing.</p>
-                        <ul class="small text-muted mb-0">
-                            <li>Detects: <strong>Read, Write, Delete, Permission changes</strong></li>
-                            <li>Shows: <strong>user, domain, process name</strong></li>
-                            <li>Requires Administrator + Object Access auditing enabled</li>
-                            <li>Can query historical events up to 7 days back</li>
-                        </ul>
-                    </div>
-                </div>
-            </div>
+        <!-- Info cards -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+          <div class="card"><div class="card-body">
+            <div style="font-size:14px;font-weight:700;margin-bottom:8px;">Live File Monitor</div>
+            <div style="font-size:13px;color:var(--text-muted);margin-bottom:10px;">Real-time file system events using Java NIO WatchService.</div>
+            <ul style="font-size:12px;color:var(--text-muted);padding-left:16px;margin:0;line-height:2;">
+              <li>Detects: <strong>Create, Delete, Modify, Rename</strong></li>
+              <li>No admin privileges required</li>
+              <li>Events stream live via SSE</li>
+              <li>Monitors all sub-directories recursively</li>
+            </ul>
+          </div></div>
+          <div class="card"><div class="card-body">
+            <div style="font-size:14px;font-weight:700;margin-bottom:8px;">Windows Security Event Log</div>
+            <div style="font-size:13px;color:var(--text-muted);margin-bottom:10px;">Reads Security Event Log (4663, 4660, 4670) for deep auditing.</div>
+            <ul style="font-size:12px;color:var(--text-muted);padding-left:16px;margin:0;line-height:2;">
+              <li>Detects: <strong>Read, Write, Delete, Permission changes</strong></li>
+              <li>Shows: <strong>user, domain, process</strong></li>
+              <li>Requires Administrator + Object Access auditing</li>
+              <li>Query up to 7 days back</li>
+            </ul>
+          </div></div>
         </div>
-    </div>
+      </div>
 
-    <!-- =====================================================================
-         STATE B: Folder selected — show audit dashboard
-         ===================================================================== -->
-    <div th:if="${folderPath != null}">
+      <!-- STATE B: Folder selected -->
+      <div th:if="${folderPath != null}">
 
-        <!-- Header row -->
-        <div class="d-flex align-items-start justify-content-between flex-wrap gap-3 mb-4">
-            <div>
-                <h2 class="fw-bold mb-1">
-                    <i class="bi bi-shield-check me-2 text-primary"></i>Audit
-                    <span th:if="${monitoring}" class="badge bg-success ms-1" style="font-size:.6rem;vertical-align:middle">
-                        <i class="bi bi-circle-fill me-1" style="font-size:.4rem"></i>LIVE
-                    </span>
-                </h2>
-                <code class="text-muted fs-6" th:text="${folderPath}"></code>
+        <!-- Stats row -->
+        <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-bottom:20px;">
+          <div style="background:var(--sidebar);border-radius:var(--radius-lg);padding:14px 16px;color:#fff;">
+            <div style="font-size:11px;opacity:0.6;margin-bottom:4px;">Total Events</div>
+            <div style="font-size:24px;font-weight:800;" id="totalCount" th:text="${totalEvents}">0</div>
+          </div>
+          <th:block th:each="stat : ${eventStats}">
+            <div style="background:var(--canvas);border:1px solid var(--border);border-radius:var(--radius-lg);padding:14px 16px;">
+              <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px;" th:text="${stat[0]}"></div>
+              <div style="font-size:22px;font-weight:700;" th:text="${stat[1]}"></div>
             </div>
-            <div class="d-flex gap-2 flex-wrap">
-                <!-- Start / Stop toggle -->
-                <form th:unless="${monitoring}" th:action="@{/audit/start}" method="post" class="d-inline">
-                    <input type="hidden" name="folderPath" th:value="${folderPath}">
-                    <button class="btn btn-success fw-semibold">
-                        <i class="bi bi-play-fill me-1"></i>Start Live Monitor
-                    </button>
-                </form>
-                <form th:if="${monitoring}" th:action="@{/audit/stop}" method="post" class="d-inline">
-                    <input type="hidden" name="folderPath" th:value="${folderPath}">
-                    <button class="btn btn-outline-danger fw-semibold">
-                        <i class="bi bi-stop-fill me-1"></i>Stop Monitor
-                    </button>
-                </form>
-                <!-- Clear -->
-                <form th:action="@{/audit/clear}" method="post" class="d-inline"
-                      onsubmit="return confirm('Delete all stored audit events for this folder?')">
-                    <input type="hidden" name="folderPath" th:value="${folderPath}">
-                    <button class="btn btn-outline-secondary btn-sm">
-                        <i class="bi bi-trash me-1"></i>Clear Events
-                    </button>
-                </form>
-                <a href="/audit" class="btn btn-outline-secondary btn-sm">
-                    <i class="bi bi-arrow-left me-1"></i>Change Folder
-                </a>
+          </th:block>
+          <div th:if="${monitoring}"
+               style="background:oklch(38% 0.16 145);border-radius:var(--radius-lg);padding:14px 16px;color:#fff;">
+            <div style="font-size:11px;opacity:0.75;margin-bottom:4px;display:flex;align-items:center;gap:5px;">
+              <span class="live-dot" style="background:#4ade80;"></span> Live (session)
             </div>
+            <div style="font-size:22px;font-weight:700;" id="liveCounter">0</div>
+          </div>
         </div>
 
-        <!-- Stats cards -->
-        <div class="row g-3 mb-4">
-            <div class="col-6 col-md-3">
-                <div class="card shadow-sm rounded-3 text-white h-100" style="background:linear-gradient(135deg,#1a1a2e,#0f3460)">
-                    <div class="card-body">
-                        <div class="small opacity-75">Total Events</div>
-                        <h3 class="fw-bold mb-0" id="totalCount" th:text="${totalEvents}">0</h3>
-                    </div>
-                </div>
+        <!-- Win Event Log panel (hidden by default) -->
+        <div id="winlogPanel" style="display:none;margin-bottom:20px;" class="card">
+          <div class="card-body">
+            <div style="font-size:13px;font-weight:600;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;">
+              Windows Security Event Log
+              <div style="display:flex;gap:6px;">
+                <span th:if="${isAdmin}"   class="badge badge-success">Admin</span>
+                <span th:unless="${isAdmin}" class="badge badge-danger">Not Admin</span>
+                <span th:if="${auditStatus == 'ENABLED'}"  class="badge badge-success">Auditing On</span>
+                <span th:if="${auditStatus == 'DISABLED'}" class="badge badge-danger">Auditing Off</span>
+                <span th:if="${auditStatus == 'UNKNOWN'}"  class="badge badge-default">Policy Unknown</span>
+                <span th:if="${auditStatus == 'NO_ADMIN'}" class="badge badge-warning">Need Admin</span>
+              </div>
             </div>
-            <th:block th:each="stat : ${eventStats}">
-                <div class="col-6 col-md-2">
-                    <div class="card shadow-sm rounded-3 h-100">
-                        <div class="card-body py-3">
-                            <div class="small text-muted" th:text="${stat[0]}"></div>
-                            <h4 class="fw-bold mb-0" th:text="${stat[1]}"></h4>
-                        </div>
-                    </div>
-                </div>
-            </th:block>
-            <!-- Live counter (only visible when monitoring) -->
-            <div th:if="${monitoring}" class="col-6 col-md-2">
-                <div class="card shadow-sm rounded-3 text-white h-100" style="background:linear-gradient(135deg,#10b981,#059669)">
-                    <div class="card-body py-3">
-                        <div class="small opacity-75">Live (this session)</div>
-                        <h4 class="fw-bold mb-0" id="liveCounter">0</h4>
-                    </div>
-                </div>
+            <form th:action="@{/audit/winlog}" method="post" style="display:flex;gap:10px;align-items:center;">
+              <input type="hidden" name="folderPath" th:value="${folderPath}">
+              <select name="hours"
+                      style="padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:var(--font-ui);background:var(--canvas);">
+                <option value="1">Last 1 hour</option>
+                <option value="6">Last 6 hours</option>
+                <option value="24" selected>Last 24 hours</option>
+                <option value="48">Last 48 hours</option>
+                <option value="168">Last 7 days</option>
+              </select>
+              <button type="submit" class="btn btn-primary btn-sm">Fetch from Event Log</button>
+            </form>
+            <div th:if="${auditStatus != 'ENABLED'}" style="margin-top:12px;">
+              <div style="font-size:12px;font-weight:600;color:var(--text-muted);margin-bottom:6px;">To enable Windows file auditing, run as Administrator:</div>
+              <pre style="background:#0f1117;color:#22d3ee;border-radius:var(--radius-md);padding:12px;font-size:11px;font-family:var(--font-mono);margin:0;overflow-x:auto;">auditpol /set /subcategory:"File System" /success:enable /failure:enable
+icacls "<span th:text="${folderPath}"></span>" /audit:Everyone:(OI)(CI)(R,W,D,DC,WDAC,WO)</pre>
             </div>
+          </div>
         </div>
 
-        <!-- Windows Event Log fetch panel -->
-        <div class="card shadow-sm rounded-4 mb-4">
-            <div class="card-header bg-white border-0 pt-3 d-flex justify-content-between align-items-center">
-                <span class="fw-semibold"><i class="bi bi-windows me-2 text-primary"></i>Windows Security Event Log</span>
-                <div class="d-flex gap-2 align-items-center">
-                    <!-- Admin status -->
-                    <span th:if="${isAdmin}" class="badge bg-success">Admin</span>
-                    <span th:unless="${isAdmin}" class="badge bg-danger">Not Admin</span>
-                    <!-- Audit policy status -->
-                    <span th:if="${auditStatus == 'ENABLED'}"   class="badge bg-success">Auditing On</span>
-                    <span th:if="${auditStatus == 'DISABLED'}"  class="badge bg-danger">Auditing Off</span>
-                    <span th:if="${auditStatus == 'UNKNOWN'}"   class="badge bg-secondary">Policy Unknown</span>
-                    <span th:if="${auditStatus == 'NO_ADMIN'}"  class="badge bg-warning text-dark">Need Admin</span>
-                </div>
-            </div>
-            <div class="card-body">
-                <form th:action="@{/audit/winlog}" method="post" class="row g-2 align-items-end">
-                    <input type="hidden" name="folderPath" th:value="${folderPath}">
-                    <div class="col-auto">
-                        <label class="form-label small fw-semibold">Look back</label>
-                        <select class="form-select form-select-sm" name="hours" style="width:140px">
-                            <option value="1">Last 1 hour</option>
-                            <option value="6">Last 6 hours</option>
-                            <option value="24" selected>Last 24 hours</option>
-                            <option value="48">Last 48 hours</option>
-                            <option value="168">Last 7 days</option>
-                        </select>
-                    </div>
-                    <div class="col-auto">
-                        <button class="btn btn-primary btn-sm" type="submit">
-                            <i class="bi bi-download me-1"></i>Fetch from Event Log
-                        </button>
-                    </div>
-                </form>
-
-                <!-- Setup instructions shown when auditing is not enabled -->
-                <div th:if="${auditStatus != 'ENABLED'}" class="mt-3">
-                    <p class="small text-muted mb-2 fw-semibold">To enable Windows file auditing, run these commands as Administrator:</p>
-                    <pre class="ps-code"># 1. Enable Object Access auditing
-auditpol /set /subcategory:"File System" /success:enable /failure:enable
-
-# 2. Set SACL on the folder (audit Everyone's read/write/delete)
-icacls "<span th:text="${folderPath}"></span>" /audit:Everyone:(OI)(CI)(R,W,D,DC,WDAC,WO)
-
-# 3. Restart this app as Administrator</pre>
-                </div>
-            </div>
+        <!-- Time range filter -->
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;">
+          <span style="font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">Time range</span>
+          <div class="filter-pills">
+            <a th:href="@{/audit(path=${folderPath},timeRange='today',filter=${filter})}"
+               th:classappend="${timeRange == 'today' or timeRange == null} ? ' filter-pill-range active' : ''"
+               class="filter-pill filter-pill-range">Today</a>
+            <a th:href="@{/audit(path=${folderPath},timeRange='1d',filter=${filter})}"
+               th:classappend="${timeRange == '1d'} ? ' filter-pill-range active' : ''"
+               class="filter-pill filter-pill-range">Last 24h</a>
+            <a th:href="@{/audit(path=${folderPath},timeRange='7d',filter=${filter})}"
+               th:classappend="${timeRange == '7d'} ? ' filter-pill-range active' : ''"
+               class="filter-pill filter-pill-range">Last 7 days</a>
+            <a th:href="@{/audit(path=${folderPath},timeRange='30d',filter=${filter})}"
+               th:classappend="${timeRange == '30d'} ? ' filter-pill-range active' : ''"
+               class="filter-pill filter-pill-range">Last 30 days</a>
+            <!-- Custom range: opens date inputs inline via JS -->
+            <button type="button" id="customRangeBtn"
+                    th:classappend="${timeRange == 'custom'} ? ' filter-pill-range active' : ''"
+                    class="filter-pill filter-pill-range"
+                    onclick="document.getElementById('customRangeInputs').style.display = 'flex'">
+              Custom…
+            </button>
+          </div>
+          <!-- Custom date inputs (hidden until clicked) -->
+          <form id="customRangeInputs"
+                th:action="@{/audit}" method="get"
+                style="display:none;align-items:center;gap:6px;">
+            <input type="hidden" name="path"   th:value="${folderPath}">
+            <input type="hidden" name="filter" th:value="${filter}">
+            <input type="hidden" name="timeRange" value="custom">
+            <input type="date" name="fromDate" th:value="${fromDate}"
+                   style="padding:4px 8px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:12px;font-family:var(--font-ui);">
+            <span style="font-size:12px;color:var(--text-muted);">→</span>
+            <input type="date" name="toDate" th:value="${toDate}"
+                   style="padding:4px 8px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:12px;font-family:var(--font-ui);">
+            <button type="submit" class="btn btn-primary btn-sm">Apply</button>
+          </form>
         </div>
 
-        <!-- Event filters -->
-        <div class="d-flex gap-2 flex-wrap mb-3">
-            <a th:href="@{/audit(path=${folderPath},filter='ALL')}"
-               th:classappend="${filter == 'ALL'} ? ' active' : ''"
-               class="badge bg-light text-dark border filter-pill py-2 px-3 text-decoration-none">All</a>
-            <a th:href="@{/audit(path=${folderPath},filter='CREATED')}"
-               th:classappend="${filter == 'CREATED'} ? ' active' : ''"
-               class="badge bg-light text-dark border filter-pill py-2 px-3 text-decoration-none">Created</a>
-            <a th:href="@{/audit(path=${folderPath},filter='DELETED')}"
-               th:classappend="${filter == 'DELETED'} ? ' active' : ''"
-               class="badge bg-light text-dark border filter-pill py-2 px-3 text-decoration-none">Deleted</a>
-            <a th:href="@{/audit(path=${folderPath},filter='MODIFIED')}"
-               th:classappend="${filter == 'MODIFIED'} ? ' active' : ''"
-               class="badge bg-light text-dark border filter-pill py-2 px-3 text-decoration-none">Modified</a>
-            <a th:href="@{/audit(path=${folderPath},filter='RENAMED')}"
-               th:classappend="${filter == 'RENAMED'} ? ' active' : ''"
-               class="badge bg-light text-dark border filter-pill py-2 px-3 text-decoration-none">Renamed</a>
-            <a th:href="@{/audit(path=${folderPath},filter='READ')}"
-               th:classappend="${filter == 'READ'} ? ' active' : ''"
-               class="badge bg-light text-dark border filter-pill py-2 px-3 text-decoration-none">Read</a>
-            <a th:href="@{/audit(path=${folderPath},filter='WRITE')}"
-               th:classappend="${filter == 'WRITE'} ? ' active' : ''"
-               class="badge bg-light text-dark border filter-pill py-2 px-3 text-decoration-none">Write</a>
-            <a th:href="@{/audit(path=${folderPath},filter='PERMISSION_CHANGED')}"
-               th:classappend="${filter == 'PERMISSION_CHANGED'} ? ' active' : ''"
-               class="badge bg-light text-dark border filter-pill py-2 px-3 text-decoration-none">Permission</a>
+        <!-- Event type filters -->
+        <div class="filter-pills" style="margin-bottom:14px;">
+          <a th:each="f : ${ {'ALL','CREATED','MODIFIED','DELETED','RENAMED','READ','WRITE','PERMISSION_CHANGED'} }"
+             th:href="@{/audit(path=${folderPath},filter=${f},timeRange=${timeRange})}"
+             th:classappend="${filter == f or (f == 'ALL' and filter == null)} ? ' active' : ''"
+             class="filter-pill"
+             th:text="${f == 'ALL' ? 'All' : #strings.capitalize(#strings.toLowerCase(f)).replace('_', ' ')}">
+          </a>
+        </div>
+
+        <!-- Flash messages -->
+        <div th:if="${successMessage}"
+             style="background:oklch(95% 0.05 145);border:1px solid oklch(80% 0.1 145);border-radius:10px;padding:12px 16px;margin-bottom:16px;font-size:13px;">
+          <span th:text="${successMessage}"></span>
+        </div>
+        <div th:if="${errorMessage}"
+             style="background:oklch(97% 0.04 20);border:1px solid oklch(88% 0.08 20);border-radius:10px;padding:12px 16px;margin-bottom:16px;font-size:13px;">
+          <span th:text="${errorMessage}"></span>
         </div>
 
         <!-- Events table -->
-        <div class="card shadow-sm rounded-4">
-            <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center pt-3">
-                <span class="fw-semibold">
-                    <i class="bi bi-list-ul me-2"></i>
-                    <span th:text="${events.totalElements}"></span> event(s)
-                    <span th:if="${filter != 'ALL'}" class="text-muted small">
-                        — filtered: <span th:text="${filter}"></span>
-                    </span>
-                </span>
-                <span class="text-muted small">
-                    Page <span th:text="${events.number + 1}"></span> / <span th:text="${events.totalPages}"></span>
-                </span>
+        <div class="card" style="padding:0;">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:11px 16px;border-bottom:1px solid var(--border);">
+            <span style="font-size:12px;font-weight:600;color:var(--text-muted);">
+              <span th:text="${events.totalElements}"></span> events
+              <span th:if="${filter != null and filter != 'ALL'}" style="color:var(--text-muted);">
+                · <span th:text="${filter}"></span>
+              </span>
+            </span>
+            <div style="display:flex;align-items:center;gap:12px;">
+              <div th:if="${monitoring}"
+                   style="display:flex;align-items:center;gap:6px;font-size:12px;color:oklch(50% 0.18 145);font-weight:600;">
+                <span class="live-dot"></span> Live feed active
+              </div>
+              <form th:action="@{/audit/clear}" method="post" style="display:inline;"
+                    onsubmit="return confirm('Delete all stored audit events for this folder?')">
+                <input type="hidden" name="folderPath" th:value="${folderPath}">
+                <button type="submit" class="btn btn-ghost btn-sm" style="color:var(--danger);">Clear Events</button>
+              </form>
+              <span style="font-size:12px;color:var(--text-muted);">
+                Page <span th:text="${events.number + 1}"></span>
+                / <span th:text="${events.totalPages}"></span>
+              </span>
             </div>
-            <div class="card-body p-0">
-                <div class="table-responsive">
-                    <table class="table table-sm table-hover align-middle mb-0" id="eventsTable">
-                        <thead class="table-light">
-                            <tr>
-                                <th style="width:100px">Time</th>
-                                <th style="width:120px">Event</th>
-                                <th>File Path</th>
-                                <th style="width:80px">Source</th>
-                                <th style="width:120px">User</th>
-                                <th style="width:120px">Process</th>
-                                <th style="width:120px">Access</th>
-                            </tr>
-                        </thead>
-                        <tbody id="eventsBody">
-                        <tr th:each="ev : ${events.content}">
-                            <td class="text-muted small font-monospace"
-                                th:text="${#temporals.format(ev.occurredAt,'MM-dd HH:mm:ss')}"></td>
-                            <td>
-                                <span th:class="'badge badge-' + ${ev.eventType}"
-                                      th:text="${ev.eventType}"></span>
-                            </td>
-                            <td>
-                                <div class="path-cell" th:title="${ev.filePath}" th:text="${ev.filePath}"></div>
-                                <div th:if="${ev.oldPath != null}" class="path-cell text-muted small"
-                                     th:title="${ev.oldPath}">
-                                    <i class="bi bi-arrow-right me-1"></i><span th:text="${ev.oldPath}"></span>
-                                </div>
-                            </td>
-                            <td>
-                                <span th:class="'badge badge-' + ${ev.source}" th:text="${ev.source}"></span>
-                            </td>
-                            <td class="small">
-                                <span th:if="${ev.userName != null}"
-                                      th:text="${ev.domainName != null ? ev.domainName + '\\' + ev.userName : ev.userName}"></span>
-                                <span th:unless="${ev.userName != null}" class="text-muted">—</span>
-                            </td>
-                            <td class="small" th:text="${ev.processName ?: '—'}"></td>
-                            <td class="small text-muted" th:text="${ev.accessTypes ?: '—'}"></td>
-                        </tr>
-                        <tr th:if="${events.totalElements == 0}" id="emptyRow">
-                            <td colspan="7" class="text-center text-muted py-5">
-                                <i class="bi bi-inbox display-6 d-block mb-2"></i>
-                                No audit events yet.<br>
-                                <span class="small">Start the live monitor or fetch from Windows Event Log above.</span>
-                            </td>
-                        </tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
+          </div>
 
-            <!-- Pagination -->
-            <div class="card-footer bg-white border-0 pb-3" th:if="${events.totalPages > 1}">
-                <nav>
-                    <ul class="pagination pagination-sm justify-content-center mb-0">
-                        <li th:class="${events.first} ? 'page-item disabled' : 'page-item'">
-                            <a class="page-link" th:href="@{/audit(path=${folderPath},filter=${filter},page=${events.number - 1})}">&laquo;</a>
-                        </li>
-                        <li class="page-item disabled">
-                            <span class="page-link">
-                                <span th:text="${events.number + 1}"></span> / <span th:text="${events.totalPages}"></span>
-                            </span>
-                        </li>
-                        <li th:class="${events.last} ? 'page-item disabled' : 'page-item'">
-                            <a class="page-link" th:href="@{/audit(path=${folderPath},filter=${filter},page=${events.number + 1})}">&raquo;</a>
-                        </li>
-                    </ul>
-                </nav>
+          <table class="data-table" id="eventsTable">
+            <thead>
+              <tr>
+                <th style="width:110px;">Time</th>
+                <th style="width:140px;">Event</th>
+                <th>File Path</th>
+                <th style="width:90px;">Source</th>
+                <th style="width:130px;">User</th>
+                <th style="width:140px;">Process</th>
+              </tr>
+            </thead>
+            <tbody id="eventsBody">
+              <tr th:each="ev : ${events.content}">
+                <td class="mono" style="font-size:11px;color:var(--text-muted);white-space:nowrap;"
+                    th:text="${#temporals.format(ev.occurredAt,'MM-dd HH:mm:ss')}"></td>
+                <td>
+                  <span th:classappend="'event-' + ${ev.eventType}"
+                        style="font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:4px;letter-spacing:0.3px;font-family:var(--font-ui);"
+                        th:text="${ev.eventType}"></span>
+                </td>
+                <td style="max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                  <span class="mono" style="font-size:11px;" th:title="${ev.filePath}" th:text="${ev.filePath}"></span>
+                  <div th:if="${ev.oldPath != null}" class="mono"
+                       style="font-size:10px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
+                       th:title="${ev.oldPath}">
+                    → <span th:text="${ev.oldPath}"></span>
+                  </div>
+                </td>
+                <td>
+                  <span th:classappend="'source-' + ${ev.source}"
+                        style="font-size:10px;font-weight:600;padding:2px 6px;border-radius:4px;"
+                        th:text="${ev.source == 'WATCHSERVICE' ? 'WATCH' : 'WIN LOG'}"></span>
+                </td>
+                <td class="mono" style="font-size:12px;color:var(--text-muted);">
+                  <span th:if="${ev.userName != null}"
+                        th:text="${ev.domainName != null ? ev.domainName + '\\' + ev.userName : ev.userName}"></span>
+                  <span th:unless="${ev.userName != null}" style="color:var(--text-light);">—</span>
+                </td>
+                <td class="mono" style="font-size:11px;color:var(--text-muted);" th:text="${ev.processName ?: '—'}"></td>
+              </tr>
+              <tr th:if="${events.totalElements == 0}" id="emptyRow">
+                <td colspan="6" style="text-align:center;padding:48px;color:var(--text-muted);">
+                  No audit events yet. Start the live monitor or fetch from Windows Event Log above.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+          <!-- Pagination -->
+          <div class="pagination" th:if="${events.totalPages > 1}">
+            <span class="page-info">Page <span th:text="${events.number + 1}"></span> / <span th:text="${events.totalPages}"></span></span>
+            <div style="display:flex;gap:6px;">
+              <a th:style="${events.first} ? 'opacity:0.4;pointer-events:none;' : ''"
+                 class="btn btn-ghost btn-sm"
+                 th:href="@{/audit(path=${folderPath},filter=${filter},timeRange=${timeRange},page=${events.number - 1})}">← Prev</a>
+              <a th:style="${events.last} ? 'opacity:0.4;pointer-events:none;' : ''"
+                 class="btn btn-ghost btn-sm"
+                 th:href="@{/audit(path=${folderPath},filter=${filter},timeRange=${timeRange},page=${events.number + 1})}">Next →</a>
             </div>
+          </div>
         </div>
 
-    </div><!-- end STATE B -->
-
+      </div><!-- /STATE B -->
+    </div><!-- /app-content -->
+  </div>
 </div>
 
-<!-- Footer -->
-<footer class="bg-dark text-center py-3 mt-auto">
-    <span class="text-white-50 small">
-        <svg width="13" height="13" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg" class="me-1 mb-1">
-            <rect width="28" height="28" rx="6" fill="#e94560"/>
-            <path d="M5 8h18M5 13h12M5 18h14M5 23h9" stroke="white" stroke-width="2" stroke-linecap="round"/>
-        </svg>
-        FileScanner &copy; 2026 &mdash; Powered by Spring Boot &amp; Claude AI
-    </span>
-</footer>
-
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<!-- SSE live event stream (only when monitoring) -->
 <script th:if="${monitoring}" th:inline="javascript">
 /*<![CDATA[*/
 const FOLDER_PATH = /*[[${folderPath}]]*/ '';
 let liveCount = 0;
 
-const BADGE_COLORS = {
-    CREATED:            '#10b981', DELETED:  '#ef4444',
-    MODIFIED:           '#3b82f6', RENAMED:  '#8b5cf6',
-    READ:               '#06b6d4', WRITE:    '#f97316',
-    ACCESS:             '#6b7280', PERMISSION_CHANGED: '#f59e0b'
-};
-const SOURCE_COLORS = { WATCHSERVICE: '#6366f1', WINEVENTLOG: '#0ea5e9' };
-
 const source = new EventSource('/audit/stream?path=' + encodeURIComponent(FOLDER_PATH));
-
 source.addEventListener('audit', function(e) {
-    const ev = JSON.parse(e.data);
-    liveCount++;
+  const ev = JSON.parse(e.data);
+  liveCount++;
 
-    // Update live counter with bump animation
-    const counter = document.getElementById('liveCounter');
-    if (counter) {
-        counter.textContent = liveCount;
-        counter.classList.add('bump');
-        setTimeout(() => counter.classList.remove('bump'), 200);
-    }
+  const counter = document.getElementById('liveCounter');
+  if (counter) {
+    counter.textContent = liveCount;
+    counter.style.transform = 'scale(1.3)';
+    setTimeout(() => counter.style.transform = 'none', 200);
+  }
+  const totalEl = document.getElementById('totalCount');
+  if (totalEl) totalEl.textContent = parseInt(totalEl.textContent || '0') + 1;
 
-    // Update total count
-    const totalEl = document.getElementById('totalCount');
-    if (totalEl) totalEl.textContent = parseInt(totalEl.textContent || '0') + 1;
+  const emptyRow = document.getElementById('emptyRow');
+  if (emptyRow) emptyRow.remove();
 
-    // Remove empty-state row if present
-    const emptyRow = document.getElementById('emptyRow');
-    if (emptyRow) emptyRow.remove();
-
-    // Build new row and prepend to table body
-    const tbody = document.getElementById('eventsBody');
-    if (!tbody) return;
-    const row = buildRow(ev);
-    tbody.insertBefore(row, tbody.firstChild);
-
-    // Prune if table > 200 live rows to avoid DOM bloat
-    while (tbody.rows.length > 200) tbody.deleteRow(tbody.rows.length - 1);
+  const tbody = document.getElementById('eventsBody');
+  if (!tbody) return;
+  const row = buildRow(ev);
+  tbody.insertBefore(row, tbody.firstChild);
+  while (tbody.rows.length > 200) tbody.deleteRow(tbody.rows.length - 1);
 });
 
-source.onerror = function() {
-    console.warn('SSE connection lost — reconnecting automatically…');
-};
+source.onerror = () => console.warn('SSE connection lost — reconnecting…');
 
 function buildRow(ev) {
-    const tr = document.createElement('tr');
-    tr.className = 'event-new';
-
-    const time  = ev.occurredAt ? ev.occurredAt.substring(5, 19).replace('T', ' ') : '';
-    const color = BADGE_COLORS[ev.eventType] || '#6b7280';
-    const srcColor = SOURCE_COLORS[ev.source] || '#6b7280';
-
-    let pathHtml = `<div class="path-cell" title="${esc(ev.filePath)}">${esc(ev.filePath)}</div>`;
-    if (ev.oldPath) {
-        pathHtml += `<div class="path-cell text-muted small" title="${esc(ev.oldPath)}">
-                       <i class="bi bi-arrow-right me-1"></i>${esc(ev.oldPath)}</div>`;
-    }
-
-    const user = ev.userName ? esc(ev.userName) : '—';
-    const proc = ev.processName ? esc(ev.processName) : '—';
-    const acc  = ev.accessTypes ? esc(ev.accessTypes) : '—';
-
-    tr.innerHTML = `
-      <td class="text-muted small font-monospace">${esc(time)}</td>
-      <td><span class="badge" style="background:${color}">${esc(ev.eventType)}</span></td>
-      <td>${pathHtml}</td>
-      <td><span class="badge" style="background:${srcColor};font-size:.65rem">${esc(ev.source)}</span></td>
-      <td class="small">${user}</td>
-      <td class="small">${proc}</td>
-      <td class="small text-muted">${acc}</td>`;
-    return tr;
+  const EVENT_COLORS = {
+    CREATED:'var(--success)', DELETED:'var(--danger)', MODIFIED:'var(--info)',
+    RENAMED:'oklch(62% 0.18 280)', READ:'oklch(68% 0.17 200)',
+    WRITE:'oklch(70% 0.18 40)', PERMISSION_CHANGED:'var(--warning)', ACCESS:'var(--text-muted)'
+  };
+  const SOURCE_STYLES = {
+    WATCHSERVICE: 'background:oklch(95% 0.05 270);color:oklch(40% 0.18 270)',
+    WINEVENTLOG:  'background:oklch(95% 0.05 200);color:oklch(40% 0.17 200)'
+  };
+  const tr = document.createElement('tr');
+  const time = ev.occurredAt ? ev.occurredAt.substring(5,19).replace('T',' ') : '';
+  const color = EVENT_COLORS[ev.eventType] || 'var(--text-muted)';
+  const srcStyle = SOURCE_STYLES[ev.source] || '';
+  const user = ev.userName ? esc(ev.domainName ? ev.domainName + '\\' + ev.userName : ev.userName) : '—';
+  let pathHtml = `<span class="mono" style="font-size:11px;" title="${esc(ev.filePath)}">${esc(ev.filePath)}</span>`;
+  if (ev.oldPath) pathHtml += `<div class="mono" style="font-size:10px;color:var(--text-muted);">→ ${esc(ev.oldPath)}</div>`;
+  tr.innerHTML = `
+    <td class="mono" style="font-size:11px;color:var(--text-muted);white-space:nowrap;">${esc(time)}</td>
+    <td><span style="font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:4px;background:${color};color:#fff;">${esc(ev.eventType)}</span></td>
+    <td style="max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${pathHtml}</td>
+    <td><span style="font-size:10px;font-weight:600;padding:2px 6px;border-radius:4px;${srcStyle}">${ev.source === 'WATCHSERVICE' ? 'WATCH' : 'WIN LOG'}</span></td>
+    <td class="mono" style="font-size:12px;color:var(--text-muted);">${user}</td>
+    <td class="mono" style="font-size:11px;color:var(--text-muted);">${ev.processName ? esc(ev.processName) : '—'}</td>`;
+  return tr;
 }
-
 function esc(s) {
-    if (!s) return '';
-    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  if (!s) return '';
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 /*]]>*/
 </script>

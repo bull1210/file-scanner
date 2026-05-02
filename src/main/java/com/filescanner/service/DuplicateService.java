@@ -52,6 +52,25 @@ public class DuplicateService {
     }
 
     @Transactional
+    public int deleteGroup(Long scanId, String groupName, boolean keepFirst) throws IOException {
+        List<FileEntry> allDups = entryRepo.findAllDuplicateFiles(scanId);
+        List<FileEntry> group = allDups.stream()
+                .filter(e -> groupName.equals(e.getName()))
+                .collect(Collectors.toList());
+
+        List<FileEntry> toDelete = keepFirst ? group.subList(1, group.size()) : group;
+        int count = 0;
+        for (FileEntry entry : toDelete) {
+            Path path = Path.of(entry.getFullPath());
+            Files.deleteIfExists(path);
+            entryRepo.deleteById(entry.getId());
+            count++;
+            log.info("Deleted duplicate file: {}", entry.getFullPath());
+        }
+        return count;
+    }
+
+    @Transactional
     public String deleteFile(Long entryId) throws IOException {
         FileEntry entry = entryRepo.findById(entryId)
                 .orElseThrow(() -> new IllegalArgumentException("File entry not found: " + entryId));

@@ -58,6 +58,15 @@ public class StatsService {
         dto.setTotalFileCount(toLong(totals[0]));
         dto.setTotalSizeBytes(toLong(totals[1]));
 
+        Long dupGroups = entryRepo.countDuplicateGroups(scanId);
+        dto.setDuplicateGroupCount(dupGroups != null ? dupGroups : 0L);
+
+        Long wasted = entryRepo.sumWastedBytes(scanId);
+        dto.setDuplicateWastedBytes(wasted != null ? wasted : 0L);
+
+        Long dirCount = entryRepo.countDirectories(scanId);
+        dto.setDirectoryCount(dirCount != null ? dirCount : 0L);
+
         return dto;
     }
 
