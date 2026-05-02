@@ -62,6 +62,22 @@ public class DuplicatesController {
         return "redirect:/duplicates/" + scanId;
     }
 
+    @PostMapping("/duplicates/{scanId}/delete-group")
+    public String deleteGroup(@PathVariable Long scanId,
+                              @RequestParam String groupName,
+                              @RequestParam(defaultValue = "true") boolean keepFirst,
+                              RedirectAttributes redirectAttrs) {
+        try {
+            int deleted = duplicateService.deleteGroup(scanId, groupName, keepFirst);
+            redirectAttrs.addFlashAttribute("successMessage",
+                    "Deleted " + deleted + " duplicate(s) of \"" + groupName + "\".");
+        } catch (IOException e) {
+            redirectAttrs.addFlashAttribute("errorMessage",
+                    "Could not delete duplicates: " + e.getMessage());
+        }
+        return "redirect:/duplicates/" + scanId;
+    }
+
     @GetMapping("/duplicates/{scanId}/export.csv")
     public ResponseEntity<byte[]> exportCsv(@PathVariable Long scanId) {
         scanService.getScan(scanId)

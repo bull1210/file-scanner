@@ -1,217 +1,170 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org" lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title th:text="'Browse ' + ${account.displayName} + ' — File Scanner'">Browse — File Scanner</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
-    <style>
-        body { background:#f0f2f5; }
-        .file-row:hover { background:#f8f9fa; }
-        .ext-badge { font-size:.65rem; padding:.2em .5em; }
-        .dir-icon  { color:#f59e0b; }
-        .file-icon { color:#6c757d; }
-    </style>
-</head>
-<body class="d-flex flex-column min-vh-100">
+<head th:replace="~{fragments/head :: head(title='Browse')}"></head>
+<body>
+<div class="app-layout">
 
-<nav class="navbar navbar-dark shadow-sm" style="background:linear-gradient(135deg,#1a1a2e 0%,#0f3460 100%)">
-    <div class="container-fluid px-4">
-        <a class="navbar-brand fw-bold d-flex align-items-center" href="/">
-            <svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg" class="me-2">
-                <rect width="28" height="28" rx="6" fill="#e94560"/>
-                <path d="M5 8h18M5 13h12M5 18h14M5 23h9" stroke="white" stroke-width="2" stroke-linecap="round"/>
-                <circle cx="21" cy="20" r="5" fill="#f59e0b"/>
-                <path d="M19 20h4M21 18v4" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
-            </svg>
-            FileScanner
-        </a>
-        <div class="d-flex gap-2">
-            <a href="/" class="btn btn-sm btn-outline-light"><i class="bi bi-house-fill me-1"></i>Home</a>
-            <a href="/cloud" class="btn btn-sm btn-outline-light"><i class="bi bi-cloud-fill me-1"></i>Cloud</a>
-            <a href="/audit" class="btn btn-sm btn-outline-light"><i class="bi bi-shield-check me-1"></i>Audit</a>
-            <a href="/query" class="btn btn-sm btn-warning fw-semibold"><i class="bi bi-stars me-1"></i>AI Query</a>
-        </div>
+  <th:block th:replace="~{fragments/sidebar :: sidebar(active='cloud')}"></th:block>
+
+  <div class="app-main">
+    <div class="topbar">
+      <div>
+        <h1 class="topbar-title" th:text="'Browse · ' + ${account.displayName}">Browse</h1>
+        <p class="topbar-sub">
+          <span th:text="${account.provider == 'ONEDRIVE' ? 'OneDrive' : 'Google Drive'}"></span>
+          · <span th:text="${entries.totalElements}"></span> entries
+        </p>
+      </div>
+      <div class="topbar-actions">
+        <a th:href="@{/cloud/{id}(id=${account.id})}" class="btn btn-ghost btn-sm">← Stats</a>
+        <a th:href="@{/cloud/{id}/duplicates(id=${account.id})}" class="btn btn-ghost btn-sm" style="color:var(--danger);">Duplicates</a>
+      </div>
     </div>
-</nav>
 
-<div class="container-fluid px-4 py-4 flex-grow-1">
+    <!-- Breadcrumb + search (sticky sub-header) -->
+    <div style="padding:12px 32px;background:var(--canvas);border-bottom:1px solid var(--border);">
+      <ol class="breadcrumb" style="margin-bottom:10px;">
+        <li class="breadcrumb-item"><a href="/cloud">Cloud</a></li>
+        <li class="breadcrumb-sep">›</li>
+        <li class="breadcrumb-item">
+          <a th:href="@{/cloud/{id}(id=${account.id})}" th:text="${account.displayName}"></a>
+        </li>
+        <th:block th:each="crumb,iter : ${breadcrumbs}">
+          <li class="breadcrumb-sep">›</li>
+          <li th:class="${iter.last} ? 'breadcrumb-item active' : 'breadcrumb-item'">
+            <a th:unless="${iter.last}"
+               th:href="@{/cloud/{id}/browse(id=${account.id},path=${crumb[1]})}"
+               th:text="${crumb[0]}"></a>
+            <span th:if="${iter.last}" th:text="${crumb[0]}"></span>
+          </li>
+        </th:block>
+      </ol>
 
-    <!-- Breadcrumb nav -->
-    <nav aria-label="breadcrumb" class="mb-2">
-        <ol class="breadcrumb mb-0">
-            <li class="breadcrumb-item"><a href="/">Home</a></li>
-            <li class="breadcrumb-item"><a href="/cloud">Cloud Storage</a></li>
-            <li class="breadcrumb-item">
-                <a th:href="@{/cloud/{id}(id=${account.id})}" th:text="${account.displayName}"></a>
-            </li>
-            <li class="breadcrumb-item active">Browse</li>
-        </ol>
-    </nav>
-
-    <!-- Header row -->
-    <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
-        <div>
-            <h4 class="fw-bold mb-0">
-                <i th:if="${account.provider == 'ONEDRIVE'}"    class="bi bi-microsoft me-1 text-primary"></i>
-                <i th:if="${account.provider == 'GOOGLEDRIVE'}" class="bi bi-google me-1 text-danger"></i>
-                <span th:text="${account.displayName}"></span>
-            </h4>
+      <form th:action="@{/cloud/{id}/browse(id=${account.id})}" method="get">
+        <div style="display:flex;gap:10px;align-items:center;">
+          <div class="search-wrap" style="flex:1;max-width:420px;">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input type="text" name="search" class="search-input"
+                   placeholder="Search files and folders…"
+                   th:value="${search}">
+          </div>
+          <button type="submit" class="btn btn-ghost btn-sm">Search</button>
+          <a th:href="@{/cloud/{id}/browse(id=${account.id})}" class="btn btn-ghost btn-sm">Clear</a>
         </div>
-        <!-- Search -->
-        <form th:action="@{/cloud/{id}/browse(id=${account.id})}" method="get" class="d-flex gap-2">
-            <input type="hidden" name="page" value="0">
-            <input type="search" class="form-control form-control-sm" name="search"
-                   th:value="${search}" placeholder="Search files…" style="width:220px">
-            <button type="submit" class="btn btn-sm btn-outline-primary">
-                <i class="bi bi-search"></i>
-            </button>
-            <a th:if="${search != null}"
-               th:href="@{/cloud/{id}/browse(id=${account.id})}"
-               class="btn btn-sm btn-outline-secondary">
-                <i class="bi bi-x-lg"></i>
+      </form>
+    </div>
+
+    <div class="app-content screen-enter" style="padding-top:16px;">
+
+      <!-- Search notice -->
+      <div th:if="${search != null and !#strings.isEmpty(search)}"
+           style="background:oklch(95% 0.05 245);border:1px solid oklch(80% 0.1 245);border-radius:10px;padding:10px 16px;margin-bottom:16px;font-size:13px;color:oklch(35% 0.17 245);">
+        Showing results for "<strong th:text="${search}"></strong>" —
+        <span th:text="${entries.totalElements}"></span> items found
+      </div>
+
+      <div class="card" style="padding:0;">
+
+        <!-- Table header -->
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border);">
+          <span style="font-size:12px;font-weight:600;color:var(--text-muted);">
+            <span th:text="${entries.totalElements}"></span> entries
+          </span>
+          <span style="font-size:12px;color:var(--text-muted);">
+            Page <span th:text="${entries.number + 1}"></span>
+            of <span th:text="${entries.totalPages}"></span>
+          </span>
+        </div>
+
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th style="width:70px;">Type</th>
+              <th>Name</th>
+              <th style="width:90px;">Ext</th>
+              <th style="width:110px;">Size</th>
+              <th style="width:160px;">Last Modified</th>
+              <th style="width:50px;"></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr th:each="entry : ${entries.content}">
+              <td>
+                <span th:if="${entry.directory}"   class="badge badge-dir">DIR</span>
+                <span th:unless="${entry.directory}" class="badge badge-success">FILE</span>
+              </td>
+              <td>
+                <div style="display:flex;align-items:center;gap:8px;">
+                  <svg th:if="${entry.directory}" width="15" height="15" viewBox="0 0 24 24" fill="none"
+                       stroke="oklch(50% 0.18 270)" stroke-width="2">
+                    <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+                  </svg>
+                  <svg th:unless="${entry.directory}" width="15" height="15" viewBox="0 0 24 24" fill="none"
+                       stroke="var(--text-light)" stroke-width="2">
+                    <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/>
+                    <polyline points="13 2 13 9 20 9"/>
+                  </svg>
+                  <a th:if="${entry.directory and search == null}"
+                     th:href="@{/cloud/{id}/browse(id=${account.id},path=${entry.fullPath})}"
+                     style="font-family:var(--font-mono);font-size:13px;font-weight:600;text-decoration:none;color:var(--text);"
+                     th:text="${entry.name}"></a>
+                  <span th:unless="${entry.directory and search == null}"
+                        style="font-family:var(--font-mono);font-size:13px;"
+                        th:text="${entry.name}"></span>
+                </div>
+                <div th:if="${search != null and !#strings.isEmpty(search)}"
+                     class="mono" style="font-size:10px;color:var(--text-muted);margin-left:23px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
+                     th:title="${entry.parentPath}" th:text="${entry.parentPath}"></div>
+              </td>
+              <td>
+                <span th:if="${entry.extension != null}" class="badge badge-accent mono"
+                      th:text="${entry.extension}"></span>
+                <span th:unless="${entry.extension != null}" style="color:var(--text-light);">—</span>
+              </td>
+              <td style="font-family:var(--font-mono);font-size:12px;color:var(--text-muted);"
+                  th:text="${entry.directory ? '—' : T(com.filescanner.dto.StatsDto).formatBytes(entry.sizeBytes ?: 0)}"></td>
+              <td style="font-size:12px;color:var(--text-muted);"
+                  th:text="${entry.lastModified != null ? #temporals.format(entry.lastModified,'yyyy-MM-dd HH:mm') : '—'}"></td>
+              <td>
+                <a th:if="${entry.webUrl != null}" th:href="${entry.webUrl}" target="_blank"
+                   class="btn btn-ghost btn-sm" title="Open in cloud">↗</a>
+              </td>
+            </tr>
+            <tr th:if="${entries.totalElements == 0}">
+              <td colspan="6" style="text-align:center;padding:48px;color:var(--text-muted);">
+                <span th:text="${search != null ? 'No files match your search.' : 'This folder is empty.'}"></span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        <!-- Pagination -->
+        <div class="pagination" th:if="${entries.totalPages > 1}">
+          <span class="page-info">
+            Page <span th:text="${entries.number + 1}"></span>
+            of <span th:text="${entries.totalPages}"></span>
+          </span>
+          <div style="display:flex;gap:6px;">
+            <a th:style="${entries.first} ? 'opacity:0.4;pointer-events:none;' : ''"
+               class="btn btn-ghost btn-sm"
+               th:href="${search != null}
+                 ? @{/cloud/{id}/browse(id=${account.id},search=${search},page=${entries.number - 1})}
+                 : @{/cloud/{id}/browse(id=${account.id},path=${currentPath},page=${entries.number - 1})}">
+              ← Prev
             </a>
-        </form>
-    </div>
-
-    <!-- Path breadcrumbs (folder navigation, only when not searching) -->
-    <div th:unless="${search != null}" class="mb-3">
-        <nav aria-label="folder navigation">
-            <ol class="breadcrumb bg-white rounded-3 px-3 py-2 shadow-sm small mb-0" style="border:1px solid #e9ecef">
-                <li th:each="crumb,iter : ${breadcrumbs}"
-                    th:classappend="${iter.last ? 'breadcrumb-item active' : 'breadcrumb-item'}">
-                    <a th:unless="${iter.last}"
-                       th:href="@{/cloud/{id}/browse(id=${account.id},path=${crumb[1]})}"
-                       th:text="${crumb[0]}"></a>
-                    <span th:if="${iter.last}" th:text="${crumb[0]}"></span>
-                </li>
-            </ol>
-        </nav>
-    </div>
-
-    <!-- Search results header -->
-    <div th:if="${search != null}" class="mb-3">
-        <div class="alert alert-info py-2 mb-0 small rounded-3">
-            <i class="bi bi-search me-1"></i>
-            Search results for <strong th:text="${search}"></strong> —
-            <span th:text="${entries.totalElements}"></span> items found
+            <a th:style="${entries.last} ? 'opacity:0.4;pointer-events:none;' : ''"
+               class="btn btn-ghost btn-sm"
+               th:href="${search != null}
+                 ? @{/cloud/{id}/browse(id=${account.id},search=${search},page=${entries.number + 1})}
+                 : @{/cloud/{id}/browse(id=${account.id},path=${currentPath},page=${entries.number + 1})}">
+              Next →
+            </a>
+          </div>
         </div>
+
+      </div>
     </div>
-
-    <!-- File table -->
-    <div class="card shadow-sm" style="border:none;border-radius:16px">
-        <div class="card-body p-0">
-            <div class="table-responsive">
-                <table class="table table-hover align-middle mb-0">
-                    <thead class="table-light" style="border-radius:16px 16px 0 0">
-                        <tr>
-                            <th class="ps-4">Name</th>
-                            <th>Size</th>
-                            <th>Modified</th>
-                            <th class="text-center">Type</th>
-                            <th class="pe-4"></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr th:each="entry : ${entries.content}" class="file-row">
-                            <td class="ps-4">
-                                <!-- Directory -->
-                                <span th:if="${entry.directory}">
-                                    <i class="bi bi-folder-fill dir-icon me-2"></i>
-                                    <a th:unless="${search != null}"
-                                       th:href="@{/cloud/{id}/browse(id=${account.id},path=${entry.fullPath})}"
-                                       class="text-decoration-none text-dark fw-semibold"
-                                       th:text="${entry.name}"></a>
-                                    <span th:if="${search != null}" class="fw-semibold" th:text="${entry.name}"></span>
-                                </span>
-                                <!-- File -->
-                                <span th:unless="${entry.directory}">
-                                    <i class="bi bi-file-earmark file-icon me-2"></i>
-                                    <span th:text="${entry.name}"></span>
-                                </span>
-                                <!-- Path (shown in search mode) -->
-                                <div th:if="${search != null}" class="text-muted" style="font-size:.72rem;margin-left:1.5rem"
-                                     th:text="${entry.parentPath}"></div>
-                            </td>
-                            <td class="text-nowrap text-muted small"
-                                th:text="${entry.directory ? '—' : T(com.filescanner.dto.StatsDto).formatBytes(entry.sizeBytes ?: 0)}"></td>
-                            <td class="text-nowrap text-muted small"
-                                th:text="${entry.lastModified != null ? #temporals.format(entry.lastModified,'yyyy-MM-dd HH:mm') : '—'}"></td>
-                            <td class="text-center">
-                                <span th:if="${entry.directory}" class="badge bg-warning text-dark ext-badge">folder</span>
-                                <span th:unless="${entry.directory or entry.extension == null}"
-                                      class="badge bg-secondary ext-badge"
-                                      th:text="${entry.extension}"></span>
-                                <span th:if="${!entry.directory and entry.extension == null}"
-                                      class="badge bg-light text-muted ext-badge">—</span>
-                            </td>
-                            <td class="pe-4 text-end">
-                                <a th:if="${entry.webUrl != null}"
-                                   th:href="${entry.webUrl}" target="_blank"
-                                   class="btn btn-sm btn-outline-secondary py-0 px-2"
-                                   title="Open in cloud">
-                                    <i class="bi bi-box-arrow-up-right" style="font-size:.75rem"></i>
-                                </a>
-                            </td>
-                        </tr>
-                        <tr th:if="${entries.totalElements == 0}">
-                            <td colspan="5" class="text-center text-muted py-5">
-                                <i class="bi bi-folder2-open display-4 d-block mb-2"></i>
-                                <span th:text="${search != null ? 'No files match your search.' : 'This folder is empty.'}"></span>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-
-            <!-- Pagination -->
-            <div th:if="${entries.totalPages > 1}"
-                 class="d-flex align-items-center justify-content-between px-4 py-3 border-top">
-                <div class="text-muted small">
-                    Page <span th:text="${entries.number + 1}"></span> of <span th:text="${entries.totalPages}"></span>
-                    &mdash; <span th:text="${entries.totalElements}"></span> items
-                </div>
-                <div class="d-flex gap-1">
-                    <!-- Prev -->
-                    <a th:if="${!entries.first}"
-                       th:href="${search != null}
-                           ? @{/cloud/{id}/browse(id=${account.id},search=${search},page=${entries.number - 1})}
-                           : @{/cloud/{id}/browse(id=${account.id},path=${currentPath},page=${entries.number - 1})}"
-                       class="btn btn-sm btn-outline-secondary">
-                        <i class="bi bi-chevron-left"></i>
-                    </a>
-                    <span th:unless="${!entries.first}" class="btn btn-sm btn-outline-secondary disabled">
-                        <i class="bi bi-chevron-left"></i>
-                    </span>
-                    <!-- Next -->
-                    <a th:if="${!entries.last}"
-                       th:href="${search != null}
-                           ? @{/cloud/{id}/browse(id=${account.id},search=${search},page=${entries.number + 1})}
-                           : @{/cloud/{id}/browse(id=${account.id},path=${currentPath},page=${entries.number + 1})}"
-                       class="btn btn-sm btn-outline-secondary">
-                        <i class="bi bi-chevron-right"></i>
-                    </a>
-                    <span th:unless="${!entries.last}" class="btn btn-sm btn-outline-secondary disabled">
-                        <i class="bi bi-chevron-right"></i>
-                    </span>
-                </div>
-            </div>
-        </div>
-    </div>
-
+  </div>
 </div>
-
-<footer class="bg-dark text-center py-3 mt-auto">
-    <span class="text-white-50 small">
-        <svg width="13" height="13" viewBox="0 0 28 28" fill="none" class="me-1 mb-1">
-            <rect width="28" height="28" rx="6" fill="#e94560"/>
-            <path d="M5 8h18M5 13h12M5 18h14M5 23h9" stroke="white" stroke-width="2" stroke-linecap="round"/>
-        </svg>
-        FileScanner &copy; 2026 &mdash; Powered by Spring Boot &amp; Claude AI
-    </span>
-</footer>
-
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>

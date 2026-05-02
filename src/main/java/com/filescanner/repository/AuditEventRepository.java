@@ -10,6 +10,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Repository
@@ -19,6 +20,31 @@ public interface AuditEventRepository extends JpaRepository<AuditEvent, Long> {
     Page<AuditEvent> findByFolderAndType(@Param("path") String path,
                                          @Param("type") String type,
                                          Pageable pageable);
+
+    @Query("""
+            SELECT a FROM AuditEvent a
+            WHERE  a.folderPath = :path
+              AND  (:type = 'ALL' OR a.eventType = :type)
+              AND  a.occurredAt >= :start
+            ORDER BY a.occurredAt DESC
+            """)
+    Page<AuditEvent> findByFolderTypeAndFrom(@Param("path") String path,
+                                              @Param("type") String type,
+                                              @Param("start") LocalDateTime start,
+                                              Pageable pageable);
+
+    @Query("""
+            SELECT a FROM AuditEvent a
+            WHERE  a.folderPath = :path
+              AND  (:type = 'ALL' OR a.eventType = :type)
+              AND  a.occurredAt BETWEEN :start AND :end
+            ORDER BY a.occurredAt DESC
+            """)
+    Page<AuditEvent> findByFolderTypeAndRange(@Param("path") String path,
+                                               @Param("type") String type,
+                                               @Param("start") LocalDateTime start,
+                                               @Param("end") LocalDateTime end,
+                                               Pageable pageable);
 
     @Query("SELECT a.eventType, COUNT(a) FROM AuditEvent a WHERE a.folderPath = :path GROUP BY a.eventType ORDER BY COUNT(a) DESC")
     List<Object[]> countByEventType(@Param("path") String path);

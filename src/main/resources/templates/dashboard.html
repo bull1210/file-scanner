@@ -1,319 +1,241 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org" lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title th:text="'Dashboard — Scan #' + ${scan.id}">Dashboard</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
-    <style>
-        body { background: #f0f2f5; }
-        .stat-card { border: none; border-radius: 16px; }
-        canvas { max-height: 280px; }
-        .chart-drillable { cursor: pointer; }
-        .drillable-hint { font-size: 0.7rem; color: #9ca3af; }
-    </style>
-</head>
-<body class="d-flex flex-column min-vh-100">
+<head th:replace="~{fragments/head :: head(title='Dashboard')}"></head>
+<body>
+<div class="app-layout">
 
-<!-- Navbar -->
-<nav class="navbar navbar-dark shadow-sm" style="background:linear-gradient(135deg,#1a1a2e 0%,#0f3460 100%)">
-    <div class="container-fluid px-4">
-        <a class="navbar-brand fw-bold d-flex align-items-center" href="/">
-            <svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg" class="me-2">
-                <rect width="28" height="28" rx="6" fill="#e94560"/>
-                <path d="M5 8h18M5 13h12M5 18h14M5 23h9" stroke="white" stroke-width="2" stroke-linecap="round"/>
-                <circle cx="21" cy="20" r="5" fill="#f59e0b"/>
-                <path d="M19 20h4M21 18v4" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
-            </svg>
-            FileScanner
+  <th:block th:replace="~{fragments/sidebar :: sidebar(active='dashboard')}"></th:block>
+
+  <div class="app-main">
+    <div class="topbar">
+      <div>
+        <h1 class="topbar-title">Dashboard</h1>
+        <p class="topbar-sub mono" style="font-size:12px;"
+           th:text="${scan.rootPath} + ' · Scan #' + ${scan.id}"></p>
+      </div>
+      <div class="topbar-actions">
+        <a th:href="@{/browse/{id}(id=${scan.id})}" class="btn btn-ghost btn-sm">Browse Files</a>
+        <a href="/query" class="btn btn-primary btn-sm">AI Query</a>
+      </div>
+    </div>
+
+    <div class="app-content screen-enter">
+
+      <!-- Stat cards — 5 columns incl. duplicates -->
+      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:16px;margin-bottom:24px;">
+
+        <div class="stat-card stat-card-accent">
+          <div class="stat-card-label">Total Files</div>
+          <div class="stat-card-value"
+               th:text="${#numbers.formatInteger(stats.totalFileCount,1,'COMMA')}">0</div>
+          <div class="stat-card-sub">In this scan</div>
+        </div>
+
+        <div class="stat-card stat-card-success">
+          <div class="stat-card-label">Total Size</div>
+          <div class="stat-card-value" th:text="${stats.formattedTotalSize}">0 B</div>
+          <div class="stat-card-sub">On disk</div>
+        </div>
+
+        <div class="stat-card stat-card-warning">
+          <div class="stat-card-label">File Types</div>
+          <div class="stat-card-value" th:text="${stats.extLabels.size()}">0</div>
+          <div class="stat-card-sub">Unique extensions</div>
+        </div>
+
+        <div class="stat-card stat-card-info">
+          <div class="stat-card-label">Directories</div>
+          <div class="stat-card-value" th:text="${stats.directoryCount ?: '—'}">0</div>
+          <div class="stat-card-sub">Nested folders</div>
+        </div>
+
+        <!-- Duplicates card — clickable link to duplicates screen -->
+        <a th:href="@{/duplicates/{id}(id=${scan.id})}"
+           class="stat-card stat-card-danger"
+           style="text-decoration:none;display:block;">
+          <div class="stat-card-label">Duplicates</div>
+          <div class="stat-card-value" th:text="${stats.duplicateGroupCount ?: '—'}">—</div>
+          <div class="stat-card-sub" style="color:var(--danger);font-weight:600;"
+               th:text="${stats.duplicateWastedBytes != null ? T(com.filescanner.dto.StatsDto).formatBytes(stats.duplicateWastedBytes) + ' reclaimable' : 'Find duplicates'}">
+          </div>
         </a>
-        <div class="d-flex gap-2">
-            <a href="/" class="btn btn-sm btn-outline-light"><i class="bi bi-house-fill me-1"></i>Home</a>
-            <a th:href="@{/browse/{id}(id=${scan.id})}" class="btn btn-sm btn-outline-light">
-                <i class="bi bi-folder2-open me-1"></i>Browse
-            </a>
-            <a th:href="@{/duplicates/{id}(id=${scan.id})}" class="btn btn-sm btn-outline-danger">
-                <i class="bi bi-copy me-1"></i>Duplicates
-            </a>
-            <a th:href="@{/audit(path=${scan.rootPath})}" class="btn btn-sm btn-outline-light">
-                <i class="bi bi-shield-check me-1"></i>Audit
-            </a>
-            <a href="/query" class="btn btn-sm btn-warning fw-semibold">
-                <i class="bi bi-stars me-1"></i>AI Query
-            </a>
+
+      </div>
+
+      <!-- Charts row 1 -->
+      <div style="display:grid;grid-template-columns:1fr 1.6fr;gap:16px;margin-bottom:16px;">
+        <div class="card">
+          <div class="card-body">
+            <div style="font-size:13px;font-weight:600;margin-bottom:14px;">Files by Extension</div>
+            <canvas id="extPieChart" style="max-height:220px;"></canvas>
+          </div>
         </div>
-    </div>
-</nav>
-
-<div class="container-fluid px-4 py-4 flex-grow-1">
-
-    <!-- Breadcrumb -->
-    <nav aria-label="breadcrumb" class="mb-3">
-        <ol class="breadcrumb">
-            <li class="breadcrumb-item"><a href="/">Home</a></li>
-            <li class="breadcrumb-item active">Dashboard #<span th:text="${scan.id}"></span></li>
-        </ol>
-    </nav>
-
-    <div class="d-flex align-items-center justify-content-between mb-4">
-        <div>
-            <h2 class="fw-bold mb-0"><i class="bi bi-bar-chart-fill me-2 text-primary"></i>Scan Dashboard</h2>
-            <p class="text-muted mb-0" th:text="${scan.rootPath}"></p>
-        </div>
-    </div>
-
-    <!-- Summary cards -->
-    <div class="row g-3 mb-4">
-        <div class="col-6 col-md-3">
-            <div class="card stat-card shadow-sm text-white" style="background:linear-gradient(135deg,#667eea,#764ba2)">
-                <div class="card-body">
-                    <div class="small opacity-75">Total Files</div>
-                    <h3 class="fw-bold mb-0" th:text="${#numbers.formatInteger(stats.totalFileCount,1,'COMMA')}">0</h3>
-                </div>
+        <div class="card">
+          <div class="card-body">
+            <div style="font-size:13px;font-weight:600;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;">
+              Top 20 Largest Files
+              <span style="font-size:11px;color:var(--text-muted);font-weight:400;">Click bar → open folder</span>
             </div>
+            <canvas id="largeFilesChart" style="max-height:220px;"></canvas>
+          </div>
         </div>
-        <div class="col-6 col-md-3">
-            <div class="card stat-card shadow-sm text-white" style="background:linear-gradient(135deg,#11998e,#38ef7d)">
-                <div class="card-body">
-                    <div class="small opacity-75">Total Size</div>
-                    <h3 class="fw-bold mb-0" th:text="${stats.formattedTotalSize}">0 B</h3>
-                </div>
-            </div>
-        </div>
-        <div class="col-6 col-md-3">
-            <div class="card stat-card shadow-sm text-white" style="background:linear-gradient(135deg,#f093fb,#f5576c)">
-                <div class="card-body">
-                    <div class="small opacity-75">File Types</div>
-                    <h3 class="fw-bold mb-0" th:text="${stats.extLabels.size()}">0</h3>
-                </div>
-            </div>
-        </div>
-        <div class="col-6 col-md-3">
-            <div class="card stat-card shadow-sm text-white" style="background:linear-gradient(135deg,#4facfe,#00f2fe)">
-                <div class="card-body">
-                    <div class="small opacity-75">Scan ID</div>
-                    <h3 class="fw-bold mb-0" th:text="'#' + ${scan.id}"></h3>
-                </div>
-            </div>
-        </div>
-    </div>
+      </div>
 
-    <!-- Charts row 1 -->
-    <div class="row g-3 mb-3">
-        <div class="col-md-5">
-            <div class="card shadow-sm rounded-4 h-100">
-                <div class="card-header bg-white border-0 fw-semibold pt-3 d-flex justify-content-between align-items-center">
-                    <span><i class="bi bi-pie-chart-fill me-2 text-warning"></i>Files by Extension (top 15)</span>
-                    <span class="drillable-hint"><i class="bi bi-cursor-fill me-1"></i>Click slice to browse</span>
-                </div>
-                <div class="card-body d-flex align-items-center justify-content-center">
-                    <canvas id="extPieChart" class="chart-drillable"></canvas>
-                </div>
-            </div>
+      <!-- Charts row 2 -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px;">
+        <div class="card">
+          <div class="card-body">
+            <div style="font-size:13px;font-weight:600;margin-bottom:14px;">Files by Age</div>
+            <canvas id="ageChart" style="max-height:200px;"></canvas>
+          </div>
         </div>
-        <div class="col-md-7">
-            <div class="card shadow-sm rounded-4 h-100">
-                <div class="card-header bg-white border-0 fw-semibold pt-3 d-flex justify-content-between align-items-center">
-                    <span><i class="bi bi-file-earmark-bar-graph-fill me-2 text-primary"></i>Top 20 Largest Files</span>
-                    <span class="drillable-hint"><i class="bi bi-cursor-fill me-1"></i>Click bar to open folder</span>
-                </div>
-                <div class="card-body">
-                    <canvas id="largeFilesChart" class="chart-drillable"></canvas>
-                </div>
-            </div>
+        <div class="card">
+          <div class="card-body">
+            <div style="font-size:13px;font-weight:600;margin-bottom:14px;">Entries by Directory Depth</div>
+            <canvas id="depthChart" style="max-height:200px;"></canvas>
+          </div>
         </div>
-    </div>
+      </div>
 
-    <!-- Charts row 2 -->
-    <div class="row g-3 mb-4">
-        <div class="col-md-6">
-            <div class="card shadow-sm rounded-4 h-100">
-                <div class="card-header bg-white border-0 fw-semibold pt-3">
-                    <i class="bi bi-clock-history me-2 text-danger"></i>Files by Age
+      <!-- Largest files table -->
+      <div class="section-title"><h2>Top Largest Files</h2></div>
+      <div class="card" style="padding:0;margin-bottom:24px;">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>File</th>
+              <th>Size</th>
+              <th>Modified</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr th:each="f,iter : ${stats.largestFiles}">
+              <td><span class="mono" style="font-size:12px;color:var(--text-muted);" th:text="${iter.index + 1}"></span></td>
+              <td>
+                <div style="display:flex;align-items:center;gap:8px;">
+                  <span class="badge badge-default mono" th:text="${f.extension ?: '—'}"></span>
+                  <span class="mono" style="font-size:12px;" th:text="${f.name}"></span>
                 </div>
-                <div class="card-body">
-                    <canvas id="ageChart"></canvas>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-6">
-            <div class="card shadow-sm rounded-4 h-100">
-                <div class="card-header bg-white border-0 fw-semibold pt-3">
-                    <i class="bi bi-diagram-3-fill me-2 text-success"></i>Entries by Directory Depth
-                </div>
-                <div class="card-body">
-                    <canvas id="depthChart"></canvas>
-                </div>
-            </div>
-        </div>
-    </div>
+              </td>
+              <td><strong th:text="${T(com.filescanner.dto.StatsDto).formatBytes(f.sizeBytes)}"></strong></td>
+              <td><span style="color:var(--text-muted);font-size:12px;"
+                        th:text="${#temporals.format(f.lastModified,'yyyy-MM-dd HH:mm')}"></span></td>
+              <td>
+                <a th:href="@{/browse/{id}(id=${scan.id},path=${f.parentPath})}"
+                   class="btn btn-ghost btn-sm">Open Folder</a>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
 
-    <!-- Largest files table -->
-    <div class="card shadow-sm rounded-4 mb-4">
-        <div class="card-header bg-white border-0 fw-semibold pt-3">
-            <i class="bi bi-sort-down me-2 text-secondary"></i>Top 20 Largest Files
-            <span class="drillable-hint ms-2"><i class="bi bi-cursor-fill me-1"></i>Click name to open folder</span>
-        </div>
-        <div class="card-body p-0">
-            <div class="table-responsive">
-                <table class="table table-sm table-hover align-middle mb-0">
-                    <thead class="table-light">
-                        <tr><th>#</th><th>Name</th><th>Extension</th><th>Size</th><th>Last Modified</th></tr>
-                    </thead>
-                    <tbody>
-                    <tr th:each="f,iter : ${stats.largestFiles}">
-                        <td class="text-muted" th:text="${iter.index + 1}"></td>
-                        <td th:title="${f.fullPath}">
-                            <a th:href="@{/browse/{id}(id=${scan.id},path=${f.parentPath})}"
-                               class="text-decoration-none fw-semibold"
-                               th:text="${f.name}"></a>
-                        </td>
-                        <td><span class="badge bg-light text-dark border" th:text="${f.extension ?: '—'}"></span></td>
-                        <td class="fw-semibold" th:text="${T(com.filescanner.dto.StatsDto).formatBytes(f.sizeBytes)}"></td>
-                        <td class="text-muted small" th:text="${#temporals.format(f.lastModified,'yyyy-MM-dd HH:mm')}"></td>
-                    </tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
+    </div><!-- /app-content -->
+  </div><!-- /app-main -->
+</div><!-- /app-layout -->
 
-</div>
-
-<!-- Footer -->
-<footer class="bg-dark text-center py-3 mt-auto">
-    <span class="text-white-50 small">
-        <svg width="13" height="13" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg" class="me-1 mb-1">
-            <rect width="28" height="28" rx="6" fill="#e94560"/>
-            <path d="M5 8h18M5 13h12M5 18h14M5 23h9" stroke="white" stroke-width="2" stroke-linecap="round"/>
-        </svg>
-        FileScanner &copy; 2026 &mdash; Powered by Spring Boot &amp; Claude AI
-    </span>
-</footer>
-
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
 <script th:inline="javascript">
 /*<![CDATA[*/
-const scanId     = /*[[${scan.id}]]*/ 0;
-const extLabels  = /*[[${stats.extLabels}]]*/  [];
-const extCounts  = /*[[${stats.extCounts}]]*/  [];
-const largeNames = /*[[${stats.largestFiles.![name]}]]*/ [];
-const largeSizes = /*[[${stats.largestFiles.![sizeBytes]}]]*/ [];
-const largePaths = /*[[${stats.largestFiles.![parentPath]}]]*/ [];
-const ageCounts  = /*[[${stats.ageBuckets}]]*/ [0,0,0,0,0];
+const scanId      = /*[[${scan.id}]]*/ 0;
+const extLabels   = /*[[${stats.extLabels}]]*/  [];
+const extCounts   = /*[[${stats.extCounts}]]*/  [];
+const largeNames  = /*[[${stats.largestFiles.![name]}]]*/ [];
+const largeSizes  = /*[[${stats.largestFiles.![sizeBytes]}]]*/ [];
+const largePaths  = /*[[${stats.largestFiles.![parentPath]}]]*/ [];
+const ageCounts   = /*[[${stats.ageBuckets}]]*/ [0,0,0,0,0];
 const depthLevels = /*[[${stats.depthLevels}]]*/ [];
 const depthCounts = /*[[${stats.depthCounts}]]*/ [];
 
-const PALETTE = [
-    '#6366f1','#f59e0b','#10b981','#ef4444','#3b82f6',
-    '#8b5cf6','#ec4899','#14b8a6','#f97316','#84cc16',
-    '#06b6d4','#a855f7','#e11d48','#0ea5e9','#22c55e'
-];
+const PALETTE = ['#22d3ee','#a78bfa','#34d399','#fb923c','#f472b6',
+                 '#60a5fa','#facc15','#4ade80','#f87171','#818cf8',
+                 '#2dd4bf','#e879f9','#fbbf24','#6ee7b7','#c084fc'];
 
-// Extension doughnut — drillable: click slice → browse by extension
+const CHART_FONT = { family: 'DM Sans', size: 11 };
+const GRID_COLOR = '#f3f4f6';
+
+// Extension doughnut
 new Chart(document.getElementById('extPieChart'), {
-    type: 'doughnut',
-    data: {
-        labels: extLabels.slice(0, 15),
-        datasets: [{
-            data: extCounts.slice(0, 15),
-            backgroundColor: PALETTE,
-            borderWidth: 2,
-            borderColor: '#fff'
-        }]
+  type: 'doughnut',
+  data: {
+    labels: extLabels.slice(0,15),
+    datasets: [{ data: extCounts.slice(0,15), backgroundColor: PALETTE, borderWidth: 2, borderColor: '#fff' }]
+  },
+  options: {
+    cutout: '65%',
+    onClick(evt, elements) {
+      if (!elements.length) return;
+      const ext = extLabels[elements[0].index];
+      if (ext && ext !== '(none)') {
+        window.location.href = '/browse/' + scanId + '?search=.' + encodeURIComponent(ext);
+      }
     },
-    options: {
-        onClick(evt, elements) {
-            if (!elements.length) return;
-            const ext = extLabels[elements[0].index];
-            if (ext && ext !== '(none)') {
-                window.location.href = '/browse/' + scanId + '?search=.' + encodeURIComponent(ext);
-            }
-        },
-        onHover(evt, elements) {
-            evt.native.target.style.cursor = elements.length ? 'pointer' : 'default';
-        },
-        plugins: { legend: { position: 'right', labels: { boxWidth: 12, padding: 10, font: { size: 11 } } } },
-        cutout: '60%'
-    }
+    onHover(evt, elements) { evt.native.target.style.cursor = elements.length ? 'pointer' : 'default'; },
+    plugins: { legend: { position: 'right', labels: { font: CHART_FONT, boxWidth: 10, padding: 8 } } }
+  }
 });
 
-// Largest files horizontal bar — drillable: click bar → open parent folder
+// Largest files horizontal bar
 new Chart(document.getElementById('largeFilesChart'), {
-    type: 'bar',
-    data: {
-        labels: largeNames,
-        datasets: [{
-            label: 'Size',
-            data: largeSizes,
-            backgroundColor: 'rgba(99,102,241,0.75)',
-            borderRadius: 4
-        }]
+  type: 'bar',
+  data: {
+    labels: largeNames,
+    datasets: [{ data: largeSizes, backgroundColor: 'oklch(72% 0.18 200)', borderRadius: 4 }]
+  },
+  options: {
+    indexAxis: 'y',
+    onClick(evt, elements) {
+      if (!elements.length) return;
+      const p = largePaths[elements[0].index];
+      if (p) window.location.href = '/browse/' + scanId + '?path=' + encodeURIComponent(p);
     },
-    options: {
-        indexAxis: 'y',
-        onClick(evt, elements) {
-            if (!elements.length) return;
-            const parentPath = largePaths[elements[0].index];
-            if (parentPath) {
-                window.location.href = '/browse/' + scanId + '?path=' + encodeURIComponent(parentPath);
-            }
-        },
-        onHover(evt, elements) {
-            evt.native.target.style.cursor = elements.length ? 'pointer' : 'default';
-        },
-        plugins: { legend: { display: false } },
-        scales: {
-            x: { ticks: { callback: v => formatBytes(v) }, grid: { color: '#f3f4f6' } },
-            y: { ticks: { font: { size: 10 } } }
-        }
+    onHover(evt, elements) { evt.native.target.style.cursor = elements.length ? 'pointer' : 'default'; },
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { ticks: { callback: v => formatBytes(v), font: CHART_FONT }, grid: { color: GRID_COLOR } },
+      y: { ticks: { font: { family: 'JetBrains Mono', size: 10 } }, grid: { display: false } }
     }
+  }
 });
 
-// Age bar chart
+// Age bar
 new Chart(document.getElementById('ageChart'), {
-    type: 'bar',
-    data: {
-        labels: ['< 1 day', '1–7 days', '7–30 days', '30d–1 year', '> 1 year'],
-        datasets: [{
-            label: 'Files',
-            data: ageCounts,
-            backgroundColor: ['#10b981','#3b82f6','#f59e0b','#ef4444','#6b7280'],
-            borderRadius: 6
-        }]
-    },
-    options: {
-        plugins: { legend: { display: false } },
-        scales: { y: { beginAtZero: true, grid: { color: '#f3f4f6' } } }
-    }
+  type: 'bar',
+  data: {
+    labels: ['< 1 day','1–7 days','7–30 days','30d–1 year','> 1 year'],
+    datasets: [{
+      data: ageCounts,
+      backgroundColor: ['#22d3ee','#60a5fa','#a78bfa','#f472b6','#94a3b8'],
+      borderRadius: 6
+    }]
+  },
+  options: {
+    plugins: { legend: { display: false } },
+    scales: { y: { beginAtZero: true, grid: { color: GRID_COLOR }, ticks: { font: CHART_FONT } },
+              x: { grid: { display: false }, ticks: { font: CHART_FONT } } }
+  }
 });
 
-// Depth bar chart
+// Depth bar
 new Chart(document.getElementById('depthChart'), {
-    type: 'bar',
-    data: {
-        labels: depthLevels.map(d => 'Level ' + d),
-        datasets: [{
-            label: 'Entries',
-            data: depthCounts,
-            backgroundColor: 'rgba(16,185,129,0.75)',
-            borderRadius: 6
-        }]
-    },
-    options: {
-        plugins: { legend: { display: false } },
-        scales: { y: { beginAtZero: true, grid: { color: '#f3f4f6' } } }
-    }
+  type: 'bar',
+  data: {
+    labels: depthLevels.map(d => 'Level ' + d),
+    datasets: [{ data: depthCounts, backgroundColor: '#22d3ee', borderRadius: 4 }]
+  },
+  options: {
+    plugins: { legend: { display: false } },
+    scales: { y: { beginAtZero: true, grid: { color: GRID_COLOR }, ticks: { font: CHART_FONT } },
+              x: { grid: { display: false }, ticks: { font: CHART_FONT } } }
+  }
 });
 
 function formatBytes(b) {
-    if (b == null || b < 1024) return (b || 0) + ' B';
-    const units = ['KB','MB','GB','TB'];
-    let i = -1;
-    do { b /= 1024; i++; } while (b >= 1024 && i < units.length - 1);
-    return b.toFixed(1) + ' ' + units[i];
+  if (b == null || b < 1024) return (b || 0) + ' B';
+  const u = ['KB','MB','GB','TB']; let i = -1;
+  do { b /= 1024; i++; } while (b >= 1024 && i < u.length - 1);
+  return b.toFixed(1) + ' ' + u[i];
 }
 /*]]>*/
 </script>

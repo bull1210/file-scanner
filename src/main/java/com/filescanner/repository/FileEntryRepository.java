@@ -76,6 +76,36 @@ public interface FileEntryRepository extends JpaRepository<FileEntry, Long> {
             """)
     List<FileEntry> findAllDuplicateFiles(@Param("scanId") Long scanId);
 
+    @Query("""
+            SELECT COUNT(DISTINCT e.name)
+            FROM   FileEntry e
+            WHERE  e.scanId = :scanId AND e.directory = false
+              AND  e.name IN (
+                  SELECT e2.name FROM FileEntry e2
+                  WHERE  e2.scanId = :scanId AND e2.directory = false
+                  GROUP BY e2.name HAVING COUNT(e2) > 1
+              )
+            """)
+    Long countDuplicateGroups(@Param("scanId") Long scanId);
+
+    @Query(value = """
+            SELECT SUM(fe.size_bytes) - SUM(fe.min_size)
+            FROM (
+              SELECT name, size_bytes, MIN(size_bytes) OVER (PARTITION BY name) AS min_size
+              FROM file_entry
+              WHERE scan_id = :scanId AND is_directory = false
+                AND name IN (
+                  SELECT name FROM file_entry
+                  WHERE scan_id = :scanId AND is_directory = false
+                  GROUP BY name HAVING COUNT(*) > 1
+                )
+            ) fe
+            """, nativeQuery = true)
+    Long sumWastedBytes(@Param("scanId") Long scanId);
+
+    @Query("SELECT COUNT(e) FROM FileEntry e WHERE e.scanId = :scanId AND e.directory = true")
+    Long countDirectories(@Param("scanId") Long scanId);
+
     @Modifying
     @Transactional
     @Query("DELETE FROM FileEntry e WHERE e.scanId = :scanId")

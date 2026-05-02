@@ -1,245 +1,219 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org" lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title th:text="'Duplicates — Scan #' + ${scan.id}">Duplicates</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
-    <style>
-        body { background: #f0f2f5; }
-        .group-header { background: #f8f9fa; }
-        .group-name   { font-family: monospace; font-weight: 600; font-size: .9rem; word-break: break-all; }
-        .path-cell    { max-width: 480px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-                        font-family: monospace; font-size: .8rem; color: #495057; }
-        .accordion-button:not(.collapsed) { background: #fff3cd; color: #343a40; box-shadow: none; }
-        .accordion-button::after { margin-left: auto; }
-        .stat-pill    { font-size: .72rem; }
-        .wasted-badge { background: #dc3545; }
-    </style>
-</head>
-<body class="d-flex flex-column min-vh-100">
+<head th:replace="~{fragments/head :: head(title='Duplicates')}"></head>
+<body>
+<div class="app-layout">
 
-<!-- Navbar -->
-<nav class="navbar navbar-dark shadow-sm" style="background:linear-gradient(135deg,#1a1a2e 0%,#0f3460 100%)">
-    <div class="container-fluid px-4">
-        <a class="navbar-brand fw-bold d-flex align-items-center" href="/">
-            <svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg" class="me-2">
-                <rect width="28" height="28" rx="6" fill="#e94560"/>
-                <path d="M5 8h18M5 13h12M5 18h14M5 23h9" stroke="white" stroke-width="2" stroke-linecap="round"/>
-                <circle cx="21" cy="20" r="5" fill="#f59e0b"/>
-                <path d="M19 20h4M21 18v4" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
-            </svg>
-            FileScanner
-        </a>
-        <div class="d-flex gap-2">
-            <a href="/" class="btn btn-sm btn-outline-light"><i class="bi bi-house-fill me-1"></i>Home</a>
-            <a th:href="@{/dashboard/{id}(id=${scan.id})}" class="btn btn-sm btn-outline-light">
-                <i class="bi bi-bar-chart-fill me-1"></i>Dashboard
-            </a>
-            <a th:href="@{/browse/{id}(id=${scan.id})}" class="btn btn-sm btn-outline-light">
-                <i class="bi bi-folder2-open me-1"></i>Browse
-            </a>
-            <a href="/query" class="btn btn-sm btn-warning fw-semibold">
-                <i class="bi bi-stars me-1"></i>AI Query
-            </a>
-        </div>
-    </div>
-</nav>
+  <th:block th:replace="~{fragments/sidebar :: sidebar(active='duplicates')}"></th:block>
 
-<div class="container-fluid px-4 py-4 flex-grow-1">
-
-    <!-- Breadcrumb -->
-    <nav aria-label="breadcrumb" class="mb-3">
-        <ol class="breadcrumb">
-            <li class="breadcrumb-item"><a href="/">Home</a></li>
-            <li class="breadcrumb-item">
-                <a th:href="@{/dashboard/{id}(id=${scan.id})}">Dashboard #<span th:text="${scan.id}"></span></a>
-            </li>
-            <li class="breadcrumb-item active">Duplicate Files</li>
-        </ol>
-    </nav>
-
-    <!-- Page header -->
-    <div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-2">
-        <div>
-            <h2 class="fw-bold mb-0">
-                <i class="bi bi-copy me-2 text-danger"></i>Duplicate Files
-            </h2>
-            <p class="text-muted mb-0 small" th:text="${scan.rootPath}"></p>
-        </div>
+  <div class="app-main">
+    <div class="topbar">
+      <div>
+        <h1 class="topbar-title">Duplicate Files</h1>
+        <p class="topbar-sub mono" style="font-size:12px;" th:text="${scan.rootPath} + ' · Scan #' + ${scan.id}"></p>
+      </div>
+      <div class="topbar-actions">
+        <a th:href="@{/dashboard/{id}(id=${scan.id})}" class="btn btn-ghost btn-sm">Dashboard</a>
         <a th:href="@{/duplicates/{id}/export.csv(id=${scan.id})}"
-           class="btn btn-success fw-semibold"
-           th:classappend="${totalGroups == 0} ? ' disabled' : ''">
-            <i class="bi bi-file-earmark-spreadsheet me-1"></i>Export CSV
-        </a>
+           class="btn btn-ghost btn-sm"
+           th:classappend="${totalGroups == 0} ? ' disabled' : ''">Export CSV</a>
+      </div>
     </div>
 
-    <!-- Flash messages -->
-    <div th:if="${successMessage}" class="alert alert-success alert-dismissible fade show" role="alert">
-        <i class="bi bi-check-circle-fill me-2"></i><span th:text="${successMessage}"></span>
-        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-    </div>
-    <div th:if="${errorMessage}" class="alert alert-danger alert-dismissible fade show" role="alert">
-        <i class="bi bi-exclamation-triangle-fill me-2"></i><span th:text="${errorMessage}"></span>
-        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-    </div>
+    <div class="app-content screen-enter">
 
-    <!-- Summary cards -->
-    <div class="row g-3 mb-4">
-        <div class="col-sm-4">
-            <div class="card border-0 shadow-sm rounded-4 h-100">
-                <div class="card-body text-center py-3">
-                    <div class="fs-2 fw-bold text-danger" th:text="${totalGroups}">0</div>
-                    <div class="text-muted small">Duplicate Filenames</div>
-                </div>
-            </div>
+      <!-- Flash messages -->
+      <div th:if="${successMessage}"
+           style="background:oklch(95% 0.05 145);border:1px solid oklch(80% 0.1 145);border-radius:10px;padding:12px 16px;margin-bottom:20px;font-size:13px;">
+        <span th:text="${successMessage}"></span>
+      </div>
+      <div th:if="${errorMessage}"
+           style="background:oklch(97% 0.04 20);border:1px solid oklch(88% 0.08 20);border-radius:10px;padding:12px 16px;margin-bottom:20px;font-size:13px;">
+        <span th:text="${errorMessage}"></span>
+      </div>
+
+      <!-- Alert banner -->
+      <div th:unless="${totalGroups == 0}" class="alert-banner alert-banner-danger">
+        <div class="alert-banner-icon alert-banner-icon-danger">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--danger)" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="8" x2="12" y2="12"/>
+            <line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
         </div>
-        <div class="col-sm-4">
-            <div class="card border-0 shadow-sm rounded-4 h-100">
-                <div class="card-body text-center py-3">
-                    <div class="fs-2 fw-bold text-warning" th:text="${totalFiles}">0</div>
-                    <div class="text-muted small">Total Duplicate Copies</div>
-                </div>
-            </div>
+        <div style="flex:1;">
+          <div style="font-size:14px;font-weight:700;margin-bottom:2px;">
+            <span th:text="${totalGroups}"></span> groups of duplicate files found
+          </div>
+          <div style="font-size:13px;color:var(--text-muted);">
+            <strong style="color:var(--danger);"
+                    th:text="${T(com.filescanner.dto.StatsDto).formatBytes(totalSize)}"></strong>
+            wasted across
+            <strong th:text="${totalFiles - totalGroups}"></strong> extra copies.
+            Delete duplicates to reclaim disk space.
+          </div>
         </div>
-        <div class="col-sm-4">
-            <div class="card border-0 shadow-sm rounded-4 h-100">
-                <div class="card-body text-center py-3">
-                    <div class="fs-2 fw-bold text-primary"
-                         th:text="${T(com.filescanner.dto.StatsDto).formatBytes(totalSize)}">0</div>
-                    <div class="text-muted small">Total Space Used by Duplicates</div>
-                </div>
-            </div>
+      </div>
+
+      <!-- Stat cards -->
+      <div th:unless="${totalGroups == 0}"
+           style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:24px;">
+        <div class="stat-card stat-card-danger">
+          <div class="stat-card-label">Duplicate Groups</div>
+          <div class="stat-card-value" th:text="${totalGroups}">0</div>
+          <div class="stat-card-sub">Matching file names</div>
         </div>
-    </div>
-
-    <!-- Empty state -->
-    <div th:if="${totalGroups == 0}" class="card border-0 shadow-sm rounded-4 text-center py-5">
-        <div class="card-body">
-            <i class="bi bi-check-circle-fill text-success fs-1 mb-3 d-block"></i>
-            <h5 class="fw-semibold">No duplicate filenames found</h5>
-            <p class="text-muted">All file names in scan #<span th:text="${scan.id}"></span> are unique.</p>
+        <div class="stat-card stat-card-warning">
+          <div class="stat-card-label">Extra Copies</div>
+          <div class="stat-card-value" th:text="${totalFiles - totalGroups}">0</div>
+          <div class="stat-card-sub">Safe to delete</div>
         </div>
-    </div>
-
-    <!-- Duplicates accordion -->
-    <div th:unless="${totalGroups == 0}" class="accordion shadow-sm rounded-4 overflow-hidden" id="dupAccordion">
-        <div th:each="group, gStat : ${groups}"
-             class="accordion-item border-0 border-bottom">
-            <h2 class="accordion-header" th:id="'heading-' + ${gStat.index}">
-                <button class="accordion-button collapsed group-header py-2 px-3"
-                        type="button"
-                        data-bs-toggle="collapse"
-                        th:data-bs-target="'#collapse-' + ${gStat.index}"
-                        th:aria-controls="'collapse-' + ${gStat.index}"
-                        aria-expanded="false">
-                    <div class="d-flex align-items-center gap-2 flex-wrap w-100 me-2">
-                        <i class="bi bi-files text-danger flex-shrink-0"></i>
-                        <span class="group-name" th:text="${group.name}"></span>
-                        <span class="badge bg-danger stat-pill ms-1"
-                              th:text="${group.count} + ' copies'"></span>
-                        <span class="badge bg-secondary stat-pill"
-                              th:text="${T(com.filescanner.dto.StatsDto).formatBytes(group.totalSizeBytes)} + ' total'"></span>
-                    </div>
-                </button>
-            </h2>
-            <div th:id="'collapse-' + ${gStat.index}"
-                 class="accordion-collapse collapse"
-                 th:aria-labelledby="'heading-' + ${gStat.index}">
-                <div class="accordion-body p-0">
-                    <div class="table-responsive">
-                        <table class="table table-sm table-hover align-middle mb-0">
-                            <thead class="table-light">
-                                <tr>
-                                    <th>Full Path</th>
-                                    <th style="width:100px" class="text-end">Size</th>
-                                    <th style="width:150px">Last Modified</th>
-                                    <th style="width:90px" class="text-center">Action</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                            <tr th:each="file : ${group.files}">
-                                <td class="path-cell" th:title="${file.fullPath}" th:text="${file.fullPath}"></td>
-                                <td class="text-end font-monospace small"
-                                    th:text="${T(com.filescanner.dto.StatsDto).formatBytes(file.sizeBytes != null ? file.sizeBytes : 0)}">
-                                </td>
-                                <td class="text-muted small"
-                                    th:text="${file.lastModified != null ? #temporals.format(file.lastModified, 'yyyy-MM-dd HH:mm') : '—'}">
-                                </td>
-                                <td class="text-center">
-                                    <button type="button"
-                                            class="btn btn-sm btn-outline-danger"
-                                            data-bs-toggle="modal"
-                                            data-bs-target="#deleteModal"
-                                            th:data-file-id="${file.id}"
-                                            th:data-file-path="${file.fullPath}"
-                                            th:data-scan-id="${scan.id}">
-                                        <i class="bi bi-trash3"></i>
-                                    </button>
-                                </td>
-                            </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
+        <div class="stat-card stat-card-success">
+          <div class="stat-card-label">Space Wasted</div>
+          <div class="stat-card-value"
+               th:text="${T(com.filescanner.dto.StatsDto).formatBytes(totalSize)}">0</div>
+          <div class="stat-card-sub">Reclaimable on disk</div>
         </div>
-    </div>
+      </div>
 
-</div>
-
-<!-- Delete confirmation modal -->
-<div class="modal fade" id="deleteModal" tabindex="-1" aria-labelledby="deleteModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content border-0 shadow">
-            <div class="modal-header bg-danger text-white border-0">
-                <h5 class="modal-title" id="deleteModalLabel">
-                    <i class="bi bi-exclamation-triangle-fill me-2"></i>Delete File
-                </h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <p class="mb-2">This will <strong>permanently delete</strong> the file from disk and remove it from the scan record. This action cannot be undone.</p>
-                <div class="bg-light rounded p-2 mt-3">
-                    <code id="deleteFilePath" class="small text-break"></code>
-                </div>
-            </div>
-            <div class="modal-footer border-0 pt-0">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <form id="deleteForm" method="post">
-                    <button type="submit" class="btn btn-danger">
-                        <i class="bi bi-trash3-fill me-1"></i>Delete Permanently
-                    </button>
-                </form>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Footer -->
-<footer class="bg-dark text-center py-3 mt-auto">
-    <span class="text-white-50 small">
-        <svg width="13" height="13" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg" class="me-1 mb-1">
-            <rect width="28" height="28" rx="6" fill="#e94560"/>
-            <path d="M5 8h18M5 13h12M5 18h14M5 23h9" stroke="white" stroke-width="2" stroke-linecap="round"/>
+      <!-- Empty state -->
+      <div th:if="${totalGroups == 0}"
+           style="text-align:center;padding:80px 32px;background:var(--canvas);border:1px solid var(--border);border-radius:var(--radius-lg);">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
+             style="opacity:0.15;margin-bottom:16px;color:var(--success);">
+          <polyline points="20 6 9 17 4 12"/>
         </svg>
-        FileScanner &copy; 2026 &mdash; Powered by Spring Boot &amp; Claude AI
-    </span>
-</footer>
+        <div style="font-size:15px;font-weight:600;margin-bottom:8px;">No duplicate filenames found</div>
+        <div style="font-size:13px;color:var(--text-muted);">
+          All file names in scan #<span th:text="${scan.id}"></span> are unique.
+        </div>
+      </div>
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+      <!-- Duplicate groups (accordion) -->
+      <div th:unless="${totalGroups == 0}">
+        <div style="display:flex;flex-direction:column;gap:10px;">
+          <div th:each="group,gStat : ${groups}"
+               class="dupe-group"
+               th:id="'group-' + ${gStat.index}">
+
+            <!-- Group header — toggle expand -->
+            <div class="dupe-group-header"
+                 th:onclick="'toggleGroup(' + ${gStat.index} + ')'">
+              <!-- File icon -->
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-light)" stroke-width="2">
+                <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/>
+                <polyline points="13 2 13 9 20 9"/>
+              </svg>
+              <div style="flex:1;min-width:0;">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:3px;">
+                  <span class="mono" style="font-size:13.5px;font-weight:600;"
+                        th:text="${group.name}"></span>
+                  <span class="badge badge-solid-danger"
+                        th:text="${group.count} + ' copies'"></span>
+                </div>
+                <div style="font-size:12px;color:var(--text-muted);">
+                  <span th:text="${T(com.filescanner.dto.StatsDto).formatBytes(group.files[0].sizeBytes ?: 0)}"></span>
+                  each ·
+                  <strong style="color:var(--danger);"
+                          th:text="${T(com.filescanner.dto.StatsDto).formatBytes(group.totalSizeBytes)} + ' total'"></strong>
+                </div>
+              </div>
+              <!-- Chevron -->
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-light)" stroke-width="2"
+                   th:id="'chevron-' + ${gStat.index}" style="flex-shrink:0;transition:transform 0.15s;">
+                <polyline points="6 9 12 15 18 9"/>
+              </svg>
+            </div>
+
+            <!-- Group paths (collapsed by default) -->
+            <div class="dupe-group-paths" th:id="'paths-' + ${gStat.index}" style="display:none;">
+              <div style="padding:8px 16px 4px;font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">
+                Locations
+              </div>
+              <div th:each="file,fIter : ${group.files}" class="dupe-path-row">
+                <div style="display:flex;align-items:center;gap:8px;min-width:0;">
+                  <span th:if="${fIter.first}"   class="badge badge-solid-success">KEEP</span>
+                  <span th:unless="${fIter.first}" class="badge badge-solid-danger">DUPE</span>
+                  <span class="mono" style="font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
+                        th:title="${file.fullPath}" th:text="${file.fullPath}"></span>
+                </div>
+                <div th:unless="${fIter.first}" style="flex-shrink:0;margin-left:12px;">
+                  <!-- Delete modal trigger -->
+                  <button type="button" class="btn btn-danger btn-sm"
+                          data-file-id=""
+                          th:data-file-id="${file.id}"
+                          th:data-file-path="${file.fullPath}"
+                          th:data-scan-id="${scan.id}"
+                          data-modal="deleteModal">
+                    Delete
+                  </button>
+                </div>
+              </div>
+              <!-- Group-level action -->
+              <div style="padding:10px 16px;border-top:1px solid var(--border);display:flex;gap:8px;">
+                <form th:action="@{/duplicates/{id}/delete-group(id=${scan.id})}" method="post">
+                  <input type="hidden" name="groupName" th:value="${group.name}">
+                  <input type="hidden" name="keepFirst" value="true">
+                  <button type="submit" class="btn btn-danger btn-sm"
+                          onclick="return confirm('Delete all copies except the first? This cannot be undone.')">
+                    Delete duplicates · keep first
+                  </button>
+                </form>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /app-content -->
+  </div>
+</div>
+
+<!-- Delete single file modal -->
+<div id="deleteModal"
+     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:1000;align-items:center;justify-content:center;">
+  <div style="background:var(--canvas);border-radius:var(--radius-xl);padding:28px;max-width:480px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.3);">
+    <div style="font-size:16px;font-weight:700;margin-bottom:8px;">Delete File</div>
+    <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;">
+      This will <strong>permanently delete</strong> the file from disk and remove it from the scan record. This cannot be undone.
+    </p>
+    <div style="background:var(--bg);border-radius:var(--radius-md);padding:10px 14px;margin-bottom:20px;">
+      <code id="deleteFilePath" style="font-family:var(--font-mono);font-size:12px;word-break:break-all;"></code>
+    </div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;">
+      <button type="button" class="btn btn-ghost" onclick="closeDeleteModal()">Cancel</button>
+      <form id="deleteForm" method="post">
+        <button type="submit" class="btn btn-danger">Delete Permanently</button>
+      </form>
+    </div>
+  </div>
+</div>
+
 <script>
-    const deleteModal = document.getElementById('deleteModal');
-    deleteModal.addEventListener('show.bs.modal', function (event) {
-        const btn    = event.relatedTarget;
-        const fileId = btn.getAttribute('data-file-id');
-        const path   = btn.getAttribute('data-file-path');
-        const scanId = btn.getAttribute('data-scan-id');
+// Accordion toggle
+function toggleGroup(index) {
+  const paths   = document.getElementById('paths-'   + index);
+  const chevron = document.getElementById('chevron-' + index);
+  const open = paths.style.display !== 'none';
+  paths.style.display   = open ? 'none' : 'block';
+  chevron.style.transform = open ? 'none' : 'rotate(180deg)';
+}
 
-        document.getElementById('deleteFilePath').textContent = path;
-        document.getElementById('deleteForm').action = '/duplicates/' + scanId + '/delete/' + fileId;
-    });
+// Delete modal
+document.querySelectorAll('[data-modal="deleteModal"]').forEach(btn => {
+  btn.addEventListener('click', function() {
+    document.getElementById('deleteFilePath').textContent = this.dataset.filePath;
+    document.getElementById('deleteForm').action =
+      '/duplicates/' + this.dataset.scanId + '/delete/' + this.dataset.fileId;
+    document.getElementById('deleteModal').style.display = 'flex';
+  });
+});
+function closeDeleteModal() {
+  document.getElementById('deleteModal').style.display = 'none';
+}
+document.getElementById('deleteModal').addEventListener('click', function(e) {
+  if (e.target === this) closeDeleteModal();
+});
 </script>
 </body>
 </html>

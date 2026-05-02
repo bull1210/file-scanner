@@ -18,6 +18,8 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import java.io.IOException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Controller
@@ -36,17 +38,19 @@ public class AuditController {
 
     @GetMapping
     public String audit(@RequestParam(required = false) String path,
-                        @RequestParam(defaultValue = "ALL") String filter,
-                        @RequestParam(defaultValue = "0")   int page,
+                        @RequestParam(defaultValue = "ALL")   String filter,
+                        @RequestParam(defaultValue = "today") String timeRange,
+                        @RequestParam(required = false)       String fromDate,
+                        @RequestParam(required = false)       String toDate,
+                        @RequestParam(defaultValue = "0")     int page,
                         Model model) {
 
-        model.addAttribute("isAdmin",     winLogService.isAdmin());
-        model.addAttribute("auditStatus", winLogService.checkAuditPolicy().name());
+        model.addAttribute("isAdmin",       winLogService.isAdmin());
+        model.addAttribute("auditStatus",   winLogService.checkAuditPolicy().name());
         model.addAttribute("monitoredPaths", watchService.getMonitoredPaths());
 
         if (path != null && !path.isBlank()) {
-            Page<AuditEvent> events = auditRepo.findByFolderAndType(
-                path, filter, PageRequest.of(page, 50));
+            Page<AuditEvent> events = queryEvents(path, filter, timeRange, fromDate, toDate, page);
             List<Object[]> stats = auditRepo.countByEventType(path);
             long total = auditRepo.countByFolderPath(path);
 
@@ -55,9 +59,29 @@ public class AuditController {
             model.addAttribute("eventStats",  stats);
             model.addAttribute("totalEvents", total);
             model.addAttribute("filter",      filter);
+            model.addAttribute("timeRange",   timeRange);
+            model.addAttribute("fromDate",    fromDate);
+            model.addAttribute("toDate",      toDate);
             model.addAttribute("monitoring",  watchService.isMonitoring(path));
         }
         return "audit";
+    }
+
+    private Page<AuditEvent> queryEvents(String path, String filter, String timeRange,
+                                          String fromDate, String toDate, int page) {
+        var pageable = PageRequest.of(page, 50);
+        if ("custom".equals(timeRange) && fromDate != null && toDate != null) {
+            LocalDateTime start = LocalDate.parse(fromDate).atStartOfDay();
+            LocalDateTime end   = LocalDate.parse(toDate).atTime(23, 59, 59);
+            return auditRepo.findByFolderTypeAndRange(path, filter, start, end, pageable);
+        }
+        LocalDateTime start = switch (timeRange) {
+            case "1d"  -> LocalDateTime.now().minusDays(1);
+            case "7d"  -> LocalDateTime.now().minusDays(7);
+            case "30d" -> LocalDateTime.now().minusDays(30);
+            default    -> LocalDate.now().atStartOfDay();
+        };
+        return auditRepo.findByFolderTypeAndFrom(path, filter, start, pageable);
     }
 
     // -------------------------------------------------------------------------
